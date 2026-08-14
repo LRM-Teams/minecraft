@@ -6,6 +6,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 #brand { position: absolute; top: 20px; left: 24px; font-weight: 900; font-size: 17px; letter-spacing: 2px; }
 #brand span { color: #f5d56f; }
 #seed { position: absolute; top: 45px; left: 24px; color: #e9f1d3; font-size: 11px; opacity: .85; }
+#world-time { position: absolute; top: 64px; left: 24px; color: #fff2b5; font-size: 11px; opacity: .9; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: 28px; font-weight: 300; }
 #hint { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; color: #edf7ff; opacity: .9; }
 #status { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); min-width: 120px; text-align: center; color: #fff7c9; font-size: 12px; }
@@ -21,4 +22,4 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .eyebrow { margin: 0; color: #d5be67; font-size: 11px; letter-spacing: 2px; }.panel h1 { margin: 10px 0 12px; font-size: clamp(32px, 8vw, 48px); letter-spacing: 3px; }.panel p { line-height: 1.7; color: #d7e4de; font-size: 13px; }
 button { width: 100%; border: 2px solid #f2db83; padding: 13px; background: #7b9f54; color: white; font: inherit; font-weight: 700; cursor: pointer; box-shadow: inset 0 -4px rgba(0,0,0,.2); } button:hover { background: #91b85f; }
 button.link { margin-top: 14px; border-color: #66766c; padding: 8px; background: transparent; color: #cbd7d0; box-shadow: none; font-size: 12px; }.keys { margin: 20px 0 0; color: #aebcb5 !important; font-size: 11px !important; }
-@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } .slot { width: 34px; height: 34px; } .swatch { width: 16px; height: 16px; } #hotbar { bottom: 13px; } #status { bottom: 62px; } }
+@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } .slot { width: 34px; height: 34px; } .swatch { width: 16px; height: 16px; } #hotbar { bottom: 13px; } #status { bottom: 62px; } }

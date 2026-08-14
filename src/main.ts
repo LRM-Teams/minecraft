@@ -10,6 +10,7 @@ app.innerHTML = `
   <div id="hud">
     <div id="brand">VOXEL <span>ATELIER</span></div>
     <div id="seed"></div>
+    <div id="world-time"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘 · 右键放置</div>
     <div id="status"></div>
@@ -21,14 +22,15 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–6 / 滚轮切换方块</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–7 / 滚轮切换方块</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fc8e8");
-scene.fog = new THREE.Fog("#8fc8e8", 28, 86);
+const fog = new THREE.Fog("#8fc8e8", 28, 86);
+scene.fog = fog;
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -38,7 +40,6 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.prepend(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight("#d8efff", "#4a5e35", 2.2));
 const sun = new THREE.DirectionalLight("#fff2c5", 2.8);
 sun.position.set(-20, 32, 14);
 sun.castShadow = true;
@@ -48,6 +49,24 @@ sun.shadow.camera.right = 35;
 sun.shadow.camera.top = 35;
 sun.shadow.camera.bottom = -35;
 scene.add(sun);
+const skyColor = new THREE.Color();
+const daylight = new THREE.HemisphereLight("#d8efff", "#4a5e35", 2.2);
+scene.add(daylight);
+const cloudGroup = new THREE.Group();
+const cloudMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+const cloudBox = new THREE.BoxGeometry(1, 0.45, 0.8);
+[
+  [-13, 17, -9, 5], [5, 19, -21, 4], [20, 15, 7, 6], [-23, 18, 16, 3],
+].forEach(([x, y, z, length]) => {
+  const cloud = new THREE.Group();
+  for (let index = 0; index < length; index += 1) {
+    const puff = new THREE.Mesh(cloudBox, cloudMaterial);
+    puff.position.set(x + index * 0.82, y + (index % 2) * 0.18, z);
+    cloud.add(puff);
+  }
+  cloudGroup.add(cloud);
+});
+scene.add(cloudGroup);
 
 const colors: Record<BlockType, number> = {
   grass: 0x5f9f47,
@@ -56,9 +75,10 @@ const colors: Record<BlockType, number> = {
   wood: 0x96633e,
   leaves: 0x3f7f43,
   sand: 0xd9c27e,
+  water: 0x3d8ec9,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", leaves: "树叶", sand: "沙子",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", leaves: "树叶", sand: "沙子", water: "水",
 };
 const inventory = Object.fromEntries(BLOCK_TYPES.map((type) => [type, 48])) as Record<BlockType, number>;
 const box = new THREE.BoxGeometry(1, 1, 1);
@@ -80,7 +100,11 @@ class BlockRenderer {
     BLOCK_TYPES.forEach((type) => {
       const positions = this.positions.get(type) ?? [];
       if (!positions.length) return;
-      const material = new THREE.MeshLambertMaterial({ color: colors[type], transparent: type === "leaves", opacity: type === "leaves" ? 0.9 : 1 });
+      const material = new THREE.MeshLambertMaterial({
+        color: colors[type],
+        transparent: type === "leaves" || type === "water",
+        opacity: type === "water" ? 0.65 : type === "leaves" ? 0.9 : 1,
+      });
       const mesh = new THREE.InstancedMesh(box, material, positions.length);
       mesh.castShadow = type !== "leaves";
       mesh.receiveShadow = true;
@@ -116,6 +140,7 @@ const startScreen = document.querySelector<HTMLDivElement>("#start-screen")!;
 const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
+const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
@@ -209,7 +234,7 @@ document.addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Space") event.preventDefault();
   const number = Number(event.key);
-  if (number >= 1 && number <= 6) { selected = number - 1; renderHotbar(); dirty = true; }
+  if (number >= 1 && number <= BLOCK_TYPES.length) { selected = number - 1; renderHotbar(); dirty = true; }
 });
 document.addEventListener("keyup", (event) => keys.delete(event.code));
 document.addEventListener("wheel", (event) => {
@@ -258,6 +283,17 @@ const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   if (document.pointerLockElement === renderer.domElement) updatePlayer(delta);
+  const dayProgress = (now % 150000) / 150000;
+  const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
+  const angle = dayProgress * Math.PI * 2 - Math.PI / 2;
+  sun.position.set(Math.cos(angle) * 38, Math.sin(angle) * 34 + 5, 18);
+  sun.intensity = 0.15 + sunHeight * 2.65;
+  daylight.intensity = 0.25 + sunHeight * 1.95;
+  skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
+  scene.background = skyColor;
+  fog.color.copy(skyColor);
+  cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
+  timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 夜晚";
   findTarget();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

@@ -16,4 +16,11 @@ describe("VoxelWorld", () => {
     expect(restored.get(0, 15, 0)).toBe("wood");
     expect(restored.get(0, 0, 0)).toBeUndefined();
   });
+
+  it("does not treat water as solid ground", () => {
+    const world = new VoxelWorld(7, 2);
+    world.set({ x: 0, y: 12, z: 0 }, "water");
+    expect(world.isSolid(0, 12, 0)).toBe(false);
+    expect(world.topY(0, 0)).toBeLessThan(12);
+  });
 });
