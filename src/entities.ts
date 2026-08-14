@@ -9,7 +9,7 @@ import type { BlockType, VoxelWorld } from "./world";
  */
 
 export type MobState = "idle" | "chase";
-export type MobKind = "stalker" | "brute" | "wisp";
+export type MobKind = "stalker" | "brute" | "wisp" | "raider";
 
 export interface Mob {
   readonly id: number;
@@ -68,12 +68,15 @@ const KIND_DEFAULTS: Record<MobKind, MobStats> = {
   brute: { hp: 22, speed: 1.45, aggroRange: 5.5, giveUpRange: 8, reach: 1.05, damage: 2, attackCooldown: 1.55 },
   // Fragile, fast scout that notices the player farther away.
   wisp: { hp: 8, speed: 3.05, aggroRange: 8, giveUpRange: 11, reach: 0.7, damage: 1, attackCooldown: 1.0 },
+  // Nighttime raid attacker that rushes the village; moderate and relentless.
+  raider: { hp: 14, speed: 2.6, aggroRange: 9, giveUpRange: 14, reach: 0.8, damage: 1.5, attackCooldown: 1.1 },
 };
 
 const DROPS: Record<MobKind, readonly BlockType[]> = {
   stalker: ["dirt", "stone"],
   brute: ["stone", "bricks"],
   wisp: ["sand", "glass"],
+  raider: ["stone", "planks"],
 };
 
 /** Possible single-block rewards for the given original enemy variety. */
