@@ -68,6 +68,20 @@ const cloudBox = new THREE.BoxGeometry(1, 0.45, 0.8);
   cloudGroup.add(cloud);
 });
 scene.add(cloudGroup);
+const moonMaterial = new THREE.MeshBasicMaterial({ color: 0xf7f2d2, transparent: true, opacity: 0 });
+const moon = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 12), moonMaterial);
+scene.add(moon);
+const starPositions: number[] = [];
+for (let index = 0; index < 220; index += 1) {
+  const theta = index * 2.3999632297;
+  const height = 0.12 + ((index * 37) % 100) / 150;
+  const radius = Math.sqrt(1 - height * height) * 72;
+  starPositions.push(Math.cos(theta) * radius, height * 72, Math.sin(theta) * radius);
+}
+const starGeometry = new THREE.BufferGeometry();
+starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starPositions, 3));
+const starMaterial = new THREE.PointsMaterial({ color: 0xf1f7ff, size: 0.42, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false });
+scene.add(new THREE.Points(starGeometry, starMaterial));
 
 const colors: Record<BlockType, number> = {
   grass: 0x5f9f47,
@@ -368,11 +382,16 @@ const frame = (now: number): void => {
   sun.position.set(Math.cos(angle) * 38, Math.sin(angle) * 34 + 5, 18);
   sun.intensity = 0.15 + sunHeight * 2.65;
   daylight.intensity = 0.25 + sunHeight * 1.95;
+  const night = 1 - sunHeight;
+  moon.position.set(-sun.position.x, -sun.position.y + 12, -sun.position.z);
+  moonMaterial.opacity = Math.max(0, (night - 0.25) / 0.75);
+  starMaterial.opacity = Math.max(0, (night - 0.32) / 0.68) * 0.92;
+  cloudMaterial.opacity = 0.22 + sunHeight * 0.58;
   skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
   scene.background = skyColor;
   fog.color.copy(skyColor);
   cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
-  timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 夜晚";
+  timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
   findTarget();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
