@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VoxelWorld } from "../src/world";
-import { createMob, updateEntities, type Mob } from "../src/entities";
+import { createMob, mobDropCandidates, updateEntities, type Mob } from "../src/entities";
 
 /** A small flat-grass world with a known surface so tests are deterministic. */
 function flatWorld(size = 8, seed = 1): VoxelWorld {
@@ -22,6 +22,17 @@ function mobAt(x: number, z: number): Mob {
 const player = { x: 0, y: 5, z: 0 };
 
 describe("Mob creation and grounding", () => {
+  it("assigns distinct, balanced presets to the three hostile varieties", () => {
+    const stalker = createMob(1, 1, 1);
+    const brute = createMob(2, 1, 1, { kind: "brute" });
+    const wisp = createMob(3, 1, 1, { kind: "wisp" });
+    expect(stalker.kind).toBe("stalker");
+    expect(brute.hp).toBeGreaterThan(stalker.hp);
+    expect(brute.speed).toBeLessThan(stalker.speed);
+    expect(wisp.hp).toBeLessThan(stalker.hp);
+    expect(wisp.aggroRange).toBeGreaterThan(stalker.aggroRange);
+  });
+
   it("stands the body in the cell just above the ground after an update", () => {
     const world = flatWorld();
     const mob = mobAt(2, 0);
@@ -86,6 +97,12 @@ describe("Mob combat", () => {
     expect(result.deaths).toContain(mob);
     expect(result.drops.length).toBe(1);
     expect(["dirt", "stone"]).toContain(result.drops[0]);
+  });
+
+  it("uses a distinct building-material drop table for each variety", () => {
+    expect(mobDropCandidates("stalker")).toEqual(["dirt", "stone"]);
+    expect(mobDropCandidates("brute")).toEqual(["stone", "bricks"]);
+    expect(mobDropCandidates("wisp")).toEqual(["sand", "glass"]);
   });
 });
 
