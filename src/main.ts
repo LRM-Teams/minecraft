@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
+import { createGuardiansForWorld, updateGuardians, type VillageGuardian } from "./guardians";
 import { greetNearbyVillagers, createVillagersForWorld, tradeWithVillager, updateVillagers, villagerDrop, type Villager } from "./villagers";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
@@ -21,6 +22,7 @@ app.innerHTML = `
     <div id="audio-state"></div>
     <div id="network-state"></div>
     <div id="village-state"></div>
+    <div id="guardian-state"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
@@ -252,6 +254,7 @@ const spawnMobs = (): Mob[] => [
 ];
 let mobs = spawnMobs();
 let villagers: Villager[] = createVillagersForWorld(world);
+let guardians: VillageGuardian[] = createGuardiansForWorld(world);
 const villagerMeshes = new Map<number, THREE.Group>();
 const villagerBodyGeometry = new THREE.BoxGeometry(0.76, 0.8, 0.54);
 const villagerHeadGeometry = new THREE.BoxGeometry(0.6, 0.56, 0.58);
@@ -338,6 +341,76 @@ const clearMobMeshes = (): void => {
   mobMeshes.clear();
 };
 
+const guardianMeshes = new Map<number, THREE.Group>();
+const guardianBodyGeometry = new THREE.BoxGeometry(0.94, 1.08, 0.68);
+const guardianHeadGeometry = new THREE.BoxGeometry(0.78, 0.58, 0.72);
+const guardianArmGeometry = new THREE.BoxGeometry(0.22, 0.9, 0.25);
+const guardianStyle = {
+  body: new THREE.MeshLambertMaterial({ color: 0x87958f }),
+  head: new THREE.MeshLambertMaterial({ color: 0xa6b2a8 }),
+  vine: new THREE.MeshLambertMaterial({ color: 0x526f47 }),
+  eye: new THREE.MeshBasicMaterial({ color: 0xf2d75b }),
+};
+
+const createGuardianMesh = (guardian: VillageGuardian): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(guardianBodyGeometry, guardianStyle.body);
+  body.position.y = 0.62;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  const head = new THREE.Mesh(guardianHeadGeometry, guardianStyle.head);
+  head.position.y = 1.46;
+  head.castShadow = true;
+  head.receiveShadow = true;
+  const vine = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.18, 0.06), guardianStyle.vine);
+  vine.position.set(0, 0.78, 0.37);
+  group.add(body, head, vine);
+  [-0.58, 0.58].forEach((x) => {
+    const arm = new THREE.Mesh(guardianArmGeometry, guardianStyle.body);
+    arm.position.set(x, 0.58, 0);
+    arm.castShadow = true;
+    group.add(arm);
+  });
+  [-0.2, 0.2].forEach((x) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), guardianStyle.eye);
+    eye.position.set(x, 1.5, 0.39);
+    group.add(eye);
+  });
+  group.traverse((object) => { object.userData.guardianId = guardian.id; });
+  scene.add(group);
+  return group;
+};
+
+const clearGuardianMeshes = (): void => {
+  guardianMeshes.forEach((mesh) => scene.remove(mesh));
+  guardianMeshes.clear();
+};
+
+/** Rebuild guards from village plazas whenever a world or room snapshot changes. */
+const spawnGuardians = (): void => {
+  clearGuardianMeshes();
+  guardians = createGuardiansForWorld(world);
+  renderGuardianState();
+};
+
+const syncGuardianMeshes = (): void => {
+  guardians.forEach((guardian) => {
+    if (guardian.dead) {
+      const mesh = guardianMeshes.get(guardian.id);
+      if (mesh) scene.remove(mesh);
+      guardianMeshes.delete(guardian.id);
+      return;
+    }
+    let mesh = guardianMeshes.get(guardian.id);
+    if (!mesh) {
+      mesh = createGuardianMesh(guardian);
+      guardianMeshes.set(guardian.id, mesh);
+    }
+    mesh.position.set(guardian.x, guardian.y, guardian.z);
+    mesh.rotation.y = guardian.facing;
+  });
+};
+
 const createVillagerMesh = (villager: Villager): THREE.Group => {
   const group = new THREE.Group();
   const body = new THREE.Mesh(villagerBodyGeometry, villagerStyle.robe);
@@ -407,6 +480,7 @@ const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
+const guardianText = document.querySelector<HTMLDivElement>("#guardian-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -431,7 +505,12 @@ const renderVillageState = (): void => {
   const village = world.village;
   villageText.textContent = village ? `村庄 · ${village.houses.length} 户 · ${village.center.x}, ${village.center.z}` : "村庄 · 此世界暂无平原选址";
 };
+const renderGuardianState = (): void => {
+  const living = guardians.filter((guardian) => !guardian.dead).length;
+  guardianText.textContent = living ? `村庄守卫 · ${living} 名巡逻中` : "村庄守卫 · 此世界暂无驻守";
+};
 renderVillageState();
+renderGuardianState();
 let loadedChunkX = Number.NaN;
 let loadedChunkZ = Number.NaN;
 const syncRenderedChunks = (force = false): void => {
@@ -528,6 +607,7 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   clearMobMeshes();
   mobs = spawnMobs();
   spawnVillagers();
+  spawnGuardians();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
@@ -697,6 +777,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   clearMobMeshes();
   mobs = spawnMobs();
   spawnVillagers();
+  spawnGuardians();
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -949,6 +1030,12 @@ const updateMobs = (delta: number): void => {
   syncMobMeshes();
 };
 
+const updateGuardiansLoop = (delta: number): void => {
+  updateGuardians(world, guardians, mobs, delta);
+  syncGuardianMeshes();
+  renderGuardianState();
+};
+
 let villagerGreetedId: number | undefined;
 
 const updateVillagersLoop = (delta: number): void => {
@@ -988,6 +1075,7 @@ const frame = (now: number): void => {
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
     updateMobs(delta);
+    updateGuardiansLoop(delta);
     updateVillagersLoop(delta);
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
