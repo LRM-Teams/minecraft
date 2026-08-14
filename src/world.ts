@@ -1,3 +1,5 @@
+import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
+
 export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export const CHUNK_SIZE = 16;
@@ -94,19 +96,45 @@ export class VoxelWorld {
   private generate(): void {
     for (let x = -this.size; x <= this.size; x += 1) {
       for (let z = -this.size; z <= this.size; z += 1) {
-        const rolling = Math.sin((x + this.seed) * 0.19) * 1.5 + Math.cos((z - this.seed) * 0.17) * 1.4;
-        const height = Math.max(2, Math.min(9, Math.round(5 + rolling + hash(x, z, this.seed) * 1.5)));
-        const seaLevel = 3;
-        const sandy = height <= seaLevel + 1 && hash(x + 7, z + 11, this.seed) > 0.4;
+        const profile = biomeAt(x, z, this.seed);
+        const height = this.columnHeight(x, z, profile);
+        const seaLevel = profile.seaLevel;
         for (let y = 0; y <= height; y += 1) {
-          this.set({ x, y, z }, y === height ? (sandy ? "sand" : "grass") : y > height - 3 ? "dirt" : "stone");
+          this.set({ x, y, z }, this.fillBlock(profile, y, height));
         }
-        for (let y = height + 1; y <= seaLevel; y += 1) this.set({ x, y, z }, "water");
-        if (!sandy && height >= 5 && hash(x + 99, z - 24, this.seed) > 0.992 && Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2) {
+        if (profile.aquatic) {
+          for (let y = height + 1; y <= seaLevel; y += 1) this.set({ x, y, z }, "water");
+        }
+        if (
+          profile.id !== "desert"
+          && profile.treeThreshold < 1
+          && height >= seaLevel + 1
+          && hash(x + 99, z - 24, this.seed) > profile.treeThreshold
+          && Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2
+        ) {
           this.addTree(x, height + 1, z);
         }
       }
     }
+  }
+
+  /** Deterministic terrain height for a column in the given biome. */
+  private columnHeight(x: number, z: number, profile: BiomeProfile): number {
+    let height = describeColumn(x, z, this.seed).height;
+    // Rocky highlands: anything above the biome's base is exposed stone.
+    height = Math.max(1, height);
+    return Math.min(24, height);
+  }
+
+  /** Surface / subsurface / underground block distribution for a column. */
+  private fillBlock(profile: BiomeProfile, y: number, height: number): BlockType {
+    if (y === height) {
+      // Mountain peaks above the tree line are bare rock.
+      if (profile.id === "mountains" && height >= profile.baseHeight + 1) return "stone";
+      return profile.surface;
+    }
+    if (y > height - 3) return profile.subsurface;
+    return profile.underground;
   }
 
   private addTree(x: number, y: number, z: number): void {
