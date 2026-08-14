@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
+import { createMob, updateEntities, type Mob } from "./entities";
 import { craftPlanks, createInventory, type Inventory } from "./inventory";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
@@ -12,6 +13,7 @@ app.innerHTML = `
     <div id="brand">VOXEL <span>ATELIER</span></div>
     <div id="seed"></div>
     <div id="world-time"></div>
+    <div id="health"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘 · 右键放置</div>
     <div id="status"></div>
@@ -210,6 +212,63 @@ const saved = loadSave();
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
 const blocks = new BlockRenderer();
 
+const spawnMobs = (): Mob[] => [
+  createMob(1, 5, 2, { hp: 12, speed: 2.05, aggroRange: 6.5 }),
+  createMob(2, -6, -5, { hp: 12, speed: 2.2, aggroRange: 7 }),
+  createMob(3, 8, -6, { hp: 16, speed: 1.9, aggroRange: 7.5 }),
+];
+let mobs = spawnMobs();
+const mobMeshes = new Map<number, THREE.Group>();
+const mobBodyGeometry = new THREE.BoxGeometry(0.78, 0.82, 0.56);
+const mobHeadGeometry = new THREE.BoxGeometry(0.68, 0.62, 0.62);
+const mobBodyMaterial = new THREE.MeshLambertMaterial({ color: 0x59645a });
+const mobHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x7d8a7c });
+const mobEyeMaterial = new THREE.MeshBasicMaterial({ color: 0xf3534d });
+
+const createMobMesh = (mob: Mob): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(mobBodyGeometry, mobBodyMaterial);
+  body.position.y = 0.42;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  const head = new THREE.Mesh(mobHeadGeometry, mobHeadMaterial);
+  head.position.y = 1.05;
+  head.castShadow = true;
+  head.receiveShadow = true;
+  group.add(body, head);
+  [-0.18, 0.18].forEach((x) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), mobEyeMaterial);
+    eye.position.set(x, 1.1, 0.33);
+    group.add(eye);
+  });
+  group.traverse((object) => { object.userData.mobId = mob.id; });
+  scene.add(group);
+  return group;
+};
+
+const syncMobMeshes = (): void => {
+  mobs.forEach((mob) => {
+    if (mob.dead) {
+      const mesh = mobMeshes.get(mob.id);
+      if (mesh) scene.remove(mesh);
+      mobMeshes.delete(mob.id);
+      return;
+    }
+    let mesh = mobMeshes.get(mob.id);
+    if (!mesh) {
+      mesh = createMobMesh(mob);
+      mobMeshes.set(mob.id, mesh);
+    }
+    if (Number.isFinite(mob.y)) mesh.position.set(mob.x, mob.y, mob.z);
+    mesh.rotation.y = mob.facing;
+  });
+};
+
+const clearMobMeshes = (): void => {
+  mobMeshes.forEach((mesh) => scene.remove(mesh));
+  mobMeshes.clear();
+};
+
 const selection = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012, 1.012, 1.012)),
   new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }),
@@ -223,10 +282,13 @@ const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
+const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
+const maxPlayerHealth = 10;
+let playerHealth = maxPlayerHealth;
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
 const initialY = world.topY(0, 0) + 1.72;
@@ -253,6 +315,11 @@ const renderHotbar = (): void => {
   status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}` : "空槽";
 };
 renderHotbar();
+
+const renderHealth = (): void => {
+  healthText.textContent = `生命 ${"♥".repeat(playerHealth)}${"♡".repeat(maxPlayerHealth - playerHealth)}`;
+};
+renderHealth();
 
 const keys = new Set<string>();
 let verticalVelocity = 0;
