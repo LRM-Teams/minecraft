@@ -44,4 +44,33 @@ describe("VoxelWorld", () => {
     expect(world.visibleBlocks(0, 0, 1).some(({ position }) => position.x === distant.x && position.y === distant.y && position.z === distant.z)).toBe(false);
     expect(world.visibleBlocks(32, 32, 1).some(({ position }) => position.x === distant.x && position.y === distant.y && position.z === distant.z)).toBe(true);
   });
+
+  it("builds a deterministic, enterable plains village with anchors for villagers", () => {
+    const seed = 2026;
+    const one = new VoxelWorld(seed, 48);
+    const two = new VoxelWorld(seed, 48);
+    expect(one.villages).toEqual(two.villages);
+    expect(one.villages).toHaveLength(1);
+    const village = one.villages[0];
+    expect(village.homes).toHaveLength(4);
+    // The anchor is the walkable air cell immediately over the brick plaza.
+    expect(one.get(village.plaza.x, village.plaza.y - 1, village.plaza.z)).toBe("bricks");
+    village.homes.forEach((home) => {
+      expect(one.get(home.entrance.x, home.entrance.y, home.entrance.z)).toBeUndefined();
+      expect(one.get(home.interior.x, home.interior.y, home.interior.z)).toBeUndefined();
+      expect(home.workstation.y).toBe(home.interior.y);
+    });
+  });
+
+  it("keeps village blocks editable and preserves the edit in a save snapshot", () => {
+    const world = new VoxelWorld(2026, 48);
+    const village = world.villages[0];
+    expect(village).toBeTruthy();
+    if (!village) return;
+    const plaza = { x: village.plaza.x, y: village.plaza.y - 1, z: village.plaza.z };
+    world.remove(plaza);
+    const restored = VoxelWorld.fromSnapshot(world.snapshot());
+    expect(restored.get(plaza.x, plaza.y, plaza.z)).toBeUndefined();
+    expect(restored.villages).toEqual(world.villages);
+  });
 });
