@@ -12,3 +12,19 @@ export const craftPlanks = (inventory: Inventory): boolean => {
   inventory.planks += 4;
   return true;
 };
+
+/** Four mined stone blocks become four durable building bricks. */
+export const craftBricks = (inventory: Inventory): boolean => {
+  if (inventory.stone < 4) return false;
+  inventory.stone -= 4;
+  inventory.bricks += 4;
+  return true;
+};
+
+/** Four sand blocks become four translucent glass building blocks. */
+export const craftGlass = (inventory: Inventory): boolean => {
+  if (inventory.sand < 4) return false;
+  inventory.sand -= 4;
+  inventory.glass += 4;
+  return true;
+};

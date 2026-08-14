@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 import { createMob, updateEntities, type Mob } from "./entities";
-import { craftPlanks, createInventory, type Inventory } from "./inventory";
+import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
@@ -18,9 +18,18 @@ app.innerHTML = `
     <div id="health"></div>
     <div id="audio-state"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
+    <aside id="codex" class="hidden">
+      <div class="codex-title">方块图鉴 <small>G 关闭</small></div>
+      <p>采集基础：草、泥土、石头、原木、树叶、沙子和水。</p>
+      <p>建筑方块：木板、石砖、玻璃。</p>
+      <div class="recipe"><kbd>C</kbd> 原木 ×1 <span>→</span> 木板 ×4</div>
+      <div class="recipe"><kbd>V</kbd> 石头 ×4 <span>→</span> 石砖 ×4</div>
+      <div class="recipe"><kbd>F</kbd> 沙子 ×4 <span>→</span> 玻璃 ×4</div>
+      <p class="codex-note">数字键 1–0 或滚轮切换方块；玻璃适合采光建筑。</p>
+    </aside>
   </div>
   <div id="start-screen">
     <div class="panel">
@@ -28,7 +37,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–8 / 滚轮切换方块　C：1 原木合成 4 木板　M：切换音效</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
@@ -97,9 +106,11 @@ const colors: Record<BlockType, number> = {
   leaves: 0x3f7f43,
   sand: 0xd9c27e,
   water: 0x3d8ec9,
+  bricks: 0x9b5341,
+  glass: 0x9edfe5,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃",
 };
 
 type BlockFace = "side" | "top" | "bottom";
@@ -146,6 +157,8 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
       if (type === "planks" && (y % 6 === 0 || x === 0 || x === 8)) paint(base.clone().multiplyScalar(0.55), x, y, type === "planks" ? 2 : 1, type === "planks" ? 1 : 1);
       else if (type === "wood" && (x % 5 === 0 || (face === "top" && noise(x, y) > 0.66))) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
+      else if (type === "bricks" && (y % 4 === 0 || (x + Math.floor(y / 4) * 4) % 8 === 0)) paint(base.clone().multiplyScalar(0.58), x, y, 2, 1);
+      else if (type === "glass" && (x === y || x + y === 14 || noise(x, y) > 0.82)) paint(base.clone().multiplyScalar(1.22), x, y, 1, 1);
       else if (type === "water" && y % 5 === 0) paint(base.clone().multiplyScalar(1.3), x, y, 2, 1);
       else if (type !== "planks" && type !== "wood" && type !== "water" && noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.72 + noise(x + 4, y) * 0.45), x, y, 2, 2);
     }
@@ -162,10 +175,10 @@ const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
   const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
     color: 0xffffff,
     map: blockTexture(type, face),
-    transparent: type === "leaves" || type === "water",
-    opacity: type === "water" ? 0.7 : 1,
+    transparent: type === "leaves" || type === "water" || type === "glass",
+    opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
-    depthWrite: type !== "water",
+    depthWrite: type !== "water" && type !== "glass",
   });
   if (type !== "grass") return material();
   const side = material("side");
@@ -287,6 +300,7 @@ const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
+const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
@@ -313,9 +327,9 @@ const syncRenderedChunks = (force = false): void => {
 syncRenderedChunks(true);
 
 const renderHotbar = (): void => {
-  hotbar.innerHTML = Array.from({ length: 9 }, (_, index) => {
-    const type = BLOCK_TYPES[index];
-    return `<div class="slot ${index === selected ? "selected" : ""}">${index + 1}${type ? `<span class="swatch ${type}"></span><small>${inventory[type]}</small>` : ""}</div>`;
+  hotbar.innerHTML = BLOCK_TYPES.map((type, index) => {
+    const keyLabel = index === 9 ? "0" : index + 1;
+    return `<div class="slot ${index === selected ? "selected" : ""}">${keyLabel}<span class="swatch ${type}"></span><small>${inventory[type]}</small></div>`;
   }).join("");
   status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}` : "空槽";
 };
@@ -330,6 +344,21 @@ const renderAudioState = (): void => {
   audioText.textContent = `M 音效：${soundscape.isEnabled ? "开" : "关"}`;
 };
 renderAudioState();
+
+let codexOpen = false;
+const toggleCodex = (): void => {
+  codexOpen = !codexOpen;
+  codex.classList.toggle("hidden", !codexOpen);
+  status.textContent = codexOpen ? "方块图鉴已打开" : "方块图鉴已关闭";
+};
+
+const finishCraft = (type: BlockType): void => {
+  selected = BLOCK_TYPES.indexOf(type);
+  renderHotbar();
+  dirty = true;
+  persist();
+  soundscape.play("craft");
+};
 
 const keys = new Set<string>();
 let verticalVelocity = 0;
@@ -456,18 +485,33 @@ document.addEventListener("mousemove", (event) => {
 document.addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Space") event.preventDefault();
-  const number = Number(event.key);
-  if (number >= 1 && number <= BLOCK_TYPES.length) { selected = number - 1; renderHotbar(); dirty = true; }
+  const slot = event.code === "Digit0" ? 9 : event.code.startsWith("Digit") ? Number(event.code.slice(5)) - 1 : -1;
+  if (slot >= 0 && slot < BLOCK_TYPES.length) { selected = slot; renderHotbar(); dirty = true; }
   if (event.code === "KeyC" && !event.repeat) {
     soundscape.unlock();
     if (craftPlanks(inventory)) {
-      selected = BLOCK_TYPES.indexOf("planks");
-      renderHotbar();
-      dirty = true;
-      persist();
-      soundscape.play("craft");
+      finishCraft("planks");
+    } else {
+      status.textContent = "需要 1 个原木";
     }
   }
+  if (event.code === "KeyV" && !event.repeat) {
+    soundscape.unlock();
+    if (craftBricks(inventory)) {
+      finishCraft("bricks");
+    } else {
+      status.textContent = "需要 4 个石头";
+    }
+  }
+  if (event.code === "KeyF" && !event.repeat) {
+    soundscape.unlock();
+    if (craftGlass(inventory)) {
+      finishCraft("glass");
+    } else {
+      status.textContent = "需要 4 个沙子";
+    }
+  }
+  if (event.code === "KeyG" && !event.repeat) toggleCodex();
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
     if (enabled) soundscape.unlock();
