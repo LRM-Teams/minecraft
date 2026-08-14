@@ -82,6 +82,76 @@ const colors: Record<BlockType, number> = {
 const labels: Record<BlockType, string> = {
   grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水",
 };
+
+type BlockFace = "side" | "top" | "bottom";
+const textureCache = new Map<string, THREE.CanvasTexture>();
+const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
+
+/** Build original 16px textures at runtime, keeping the game asset-free and crisp at every scale. */
+const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTexture => {
+  const cacheKey = `${type}-${face}`;
+  const cached = textureCache.get(cacheKey);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas texture context is unavailable");
+  const base = new THREE.Color(colors[type]);
+  const paint = (color: THREE.Color, x = 0, y = 0, width = 16, height = 16): void => {
+    context.fillStyle = colorHex(color);
+    context.fillRect(x, y, width, height);
+  };
+  const noise = (x: number, y: number): number => {
+    const seed = type.split("").reduce((total, character) => total + character.charCodeAt(0), 0);
+    return Math.abs(Math.sin((x + 1) * 12.91 + (y + 1) * 78.23 + seed * 0.37)) % 1;
+  };
+
+  if (type === "leaves") {
+    context.clearRect(0, 0, 16, 16);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.2) paint(base.clone().multiplyScalar(0.75 + noise(x + 2, y) * 0.45), x, y, 2, 2);
+    }
+  } else if (type === "grass" && face === "side") {
+    const dirt = new THREE.Color(colors.dirt);
+    paint(dirt);
+    for (let y = 0; y < 6; y += 1) {
+      for (let x = 0; x < 16; x += 1) {
+        if (y < 3 || noise(x, y) > 0.28 + y * 0.08) paint(base.clone().multiplyScalar(0.8 + noise(x, y) * 0.35), x, y, 1, 1);
+      }
+    }
+  } else if (type === "grass" && face === "bottom") {
+    paint(new THREE.Color(colors.dirt));
+  } else {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (type === "planks" && (y % 6 === 0 || x === 0 || x === 8)) paint(base.clone().multiplyScalar(0.55), x, y, type === "planks" ? 2 : 1, type === "planks" ? 1 : 1);
+      else if (type === "wood" && (x % 5 === 0 || (face === "top" && noise(x, y) > 0.66))) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
+      else if (type === "water" && y % 5 === 0) paint(base.clone().multiplyScalar(1.3), x, y, 2, 1);
+      else if (type !== "planks" && type !== "wood" && type !== "water" && noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.72 + noise(x + 4, y) * 0.45), x, y, 2, 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  textureCache.set(cacheKey, texture);
+  return texture;
+};
+
+const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
+  const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    map: blockTexture(type, face),
+    transparent: type === "leaves" || type === "water",
+    opacity: type === "water" ? 0.7 : 1,
+    alphaTest: type === "leaves" ? 0.2 : 0,
+    depthWrite: type !== "water",
+  });
+  if (type !== "grass") return material();
+  const side = material("side");
+  return [side, side, material("top"), material("bottom"), side, side];
+};
 const box = new THREE.BoxGeometry(1, 1, 1);
 const matrix = new THREE.Matrix4();
 
@@ -90,7 +160,11 @@ class BlockRenderer {
   private positions = new Map<BlockType, BlockPosition[]>();
 
   rebuild(world: VoxelWorld): void {
-    this.meshes.forEach((mesh) => scene.remove(mesh));
+    this.meshes.forEach((mesh) => {
+      scene.remove(mesh);
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => material.dispose());
+    });
     this.meshes.clear();
     this.positions.clear();
     BLOCK_TYPES.forEach((type) => this.positions.set(type, []));
@@ -101,12 +175,7 @@ class BlockRenderer {
     BLOCK_TYPES.forEach((type) => {
       const positions = this.positions.get(type) ?? [];
       if (!positions.length) return;
-      const material = new THREE.MeshLambertMaterial({
-        color: colors[type],
-        transparent: type === "leaves" || type === "water",
-        opacity: type === "water" ? 0.65 : type === "leaves" ? 0.9 : 1,
-      });
-      const mesh = new THREE.InstancedMesh(box, material, positions.length);
+      const mesh = new THREE.InstancedMesh(box, blockMaterial(type), positions.length);
       mesh.castShadow = type !== "leaves";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
