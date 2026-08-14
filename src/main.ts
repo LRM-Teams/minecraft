@@ -19,8 +19,9 @@ app.innerHTML = `
     <div id="health"></div>
     <div id="audio-state"></div>
     <div id="network-state"></div>
+    <div id="village-state"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <aside id="codex" class="hidden">
@@ -342,6 +343,7 @@ const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
+const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -362,6 +364,11 @@ const initialY = world.topY(0, 0) + 1.72;
 camera.position.fromArray(saved?.player.position ?? [0, initialY, 8]);
 camera.rotation.set(pitch, yaw, 0);
 seedText.textContent = `WORLD SEED · ${world.seed}`;
+const renderVillageState = (): void => {
+  const village = world.village;
+  villageText.textContent = village ? `村庄 · ${village.houses.length} 户 · ${village.center.x}, ${village.center.z}` : "村庄 · 此世界暂无平原选址";
+};
+renderVillageState();
 let loadedChunkX = Number.NaN;
 let loadedChunkZ = Number.NaN;
 const syncRenderedChunks = (force = false): void => {
@@ -459,6 +466,7 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   mobs = spawnMobs();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
+  renderVillageState();
   dirty = true;
 };
 const raycaster = new THREE.Raycaster();
@@ -478,7 +486,7 @@ const persist = (): void => {
   activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
   dirty = false;
 };
-const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textContent = `WORLD SEED · ${world.seed}`; dirty = true; };
+const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textContent = `WORLD SEED · ${world.seed}`; renderVillageState(); dirty = true; };
 
 const findTarget = (): void => {
   raycaster.setFromCamera(center, camera);
@@ -600,6 +608,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
+  renderVillageState();
   renderHotbar();
   renderHealth();
   renderWorldSlots();
@@ -758,6 +767,10 @@ document.addEventListener("keydown", (event) => {
     }
   }
   if (event.code === "KeyG" && !event.repeat) toggleCodex();
+  if (event.code === "KeyP" && !event.repeat) {
+    const village = world.village;
+    status.textContent = village ? `村庄广场坐标：${village.center.x}, ${village.center.z}` : "当前世界没有可用村庄选址";
+  }
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
     if (enabled) soundscape.unlock();

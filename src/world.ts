@@ -5,7 +5,12 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 export const CHUNK_SIZE = 16;
 
 export type BlockPosition = { x: number; y: number; z: number };
-export type WorldSnapshot = { seed: number; size: number; blocks: [string, BlockType][] };
+/** Stable building anchors for the later villager simulation. */
+export type VillageHome = { id: string; entrance: BlockPosition; interior: BlockPosition; workstation: BlockPosition };
+export type VillageAnchor = { id: string; center: BlockPosition; plaza: BlockPosition; homes: VillageHome[] };
+/** Compact read view used by the HUD; detailed anchors live in `villages`. */
+export type VillageInfo = { center: BlockPosition; houses: VillageHome[] };
+export type WorldSnapshot = { seed: number; size: number; blocks: [string, BlockType][]; villages?: VillageAnchor[] };
 const NEIGHBORS: BlockPosition[] = [
   { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
   { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
@@ -16,10 +21,24 @@ const hash = (x: number, z: number, seed: number) => {
   const value = Math.sin(x * 12.9898 + z * 78.233 + seed * 0.12345) * 43758.5453;
   return value - Math.floor(value);
 };
+const clonePosition = (position: BlockPosition): BlockPosition => ({ ...position });
+const cloneVillage = (village: VillageAnchor): VillageAnchor => ({
+  ...village,
+  center: clonePosition(village.center),
+  plaza: clonePosition(village.plaza),
+  homes: village.homes.map((home) => ({
+    ...home,
+    entrance: clonePosition(home.entrance),
+    interior: clonePosition(home.interior),
+    workstation: clonePosition(home.workstation),
+  })),
+});
 
 /** A deterministic, compact voxel world. Rendering deliberately lives elsewhere. */
 export class VoxelWorld {
   readonly blocks = new Map<string, BlockType>();
+  /** Village metadata is seed-stable and is retained alongside world snapshots. */
+  readonly villages: VillageAnchor[] = [];
   readonly size: number;
   readonly seed: number;
 
@@ -27,6 +46,12 @@ export class VoxelWorld {
     this.seed = seed;
     this.size = size;
     this.generate();
+  }
+
+  /** First village convenience view for UI callers (undefined when no plains fit). */
+  get village(): VillageInfo | undefined {
+    const anchor = this.villages[0];
+    return anchor ? { center: anchor.center, houses: anchor.homes } : undefined;
   }
 
   get(x: number, y: number, z: number): BlockType | undefined {
@@ -83,13 +108,18 @@ export class VoxelWorld {
   }
 
   snapshot(): WorldSnapshot {
-    return { seed: this.seed, size: this.size, blocks: [...this.blocks.entries()] };
+    return { seed: this.seed, size: this.size, blocks: [...this.blocks.entries()], villages: this.cloneVillages() };
   }
 
   static fromSnapshot(snapshot: WorldSnapshot, size = snapshot.size ?? 30): VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
     snapshot.blocks.forEach(([position, type]) => world.blocks.set(position, type));
+    world.villages.length = 0;
+    if (snapshot.villages) world.villages.push(...snapshot.villages.map((village) => cloneVillage(village)));
+    // Older local saves have no village record. Add the deterministic structure
+    // after their saved edits, without changing the snapshot schema requirement.
+    else world.generateVillage();
     return world;
   }
 
@@ -116,6 +146,99 @@ export class VoxelWorld {
         }
       }
     }
+    this.generateVillage();
+  }
+
+  /** Generate one small village in a broad, level plains patch for this seed. */
+  private generateVillage(): void {
+    if (this.size < 20 || this.villages.length) return;
+    const site = this.findVillageSite();
+    if (!site) return;
+    const { x: centerX, z: centerZ, y: groundY } = site;
+    const radius = 8;
+    for (let x = centerX - radius; x <= centerX + radius; x += 1) {
+      for (let z = centerZ - radius; z <= centerZ + radius; z += 1) this.prepareVillageGround(x, z, groundY);
+    }
+
+    // A brick plaza plus cross roads creates an immediately recognisable layout.
+    for (let x = centerX - 2; x <= centerX + 2; x += 1) {
+      for (let z = centerZ - 2; z <= centerZ + 2; z += 1) this.set({ x, y: groundY, z }, "bricks");
+    }
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      this.set({ x: centerX + offset, y: groundY, z: centerZ }, "bricks");
+      this.set({ x: centerX, y: groundY, z: centerZ + offset }, "bricks");
+    }
+    const homes = [
+      this.buildHome(`${centerX}:${centerZ}:northwest`, centerX - 5, centerZ - 5, groundY, "south"),
+      this.buildHome(`${centerX}:${centerZ}:northeast`, centerX + 5, centerZ - 5, groundY, "south"),
+      this.buildHome(`${centerX}:${centerZ}:southwest`, centerX - 5, centerZ + 5, groundY, "north"),
+      this.buildHome(`${centerX}:${centerZ}:southeast`, centerX + 5, centerZ + 5, groundY, "north"),
+    ];
+    this.villages.push({
+      id: `village-${this.seed}-${centerX}-${centerZ}`,
+      center: { x: centerX, y: groundY + 1, z: centerZ },
+      plaza: { x: centerX, y: groundY + 1, z: centerZ },
+      homes,
+    });
+  }
+
+  /** Locate a mostly plains, gently rolling site deterministically from seed. */
+  private findVillageSite(): { x: number; y: number; z: number } | undefined {
+    const limit = this.size - 9;
+    let best: { x: number; y: number; z: number; score: number } | undefined;
+    for (let x = -limit; x <= limit; x += 2) {
+      for (let z = -limit; z <= limit; z += 2) {
+        let low = Infinity;
+        let high = -Infinity;
+        let plains = true;
+        for (const dx of [-5, 0, 5]) for (const dz of [-5, 0, 5]) {
+          const column = describeColumn(x + dx, z + dz, this.seed);
+          if (column.biome !== "plains") { plains = false; break; }
+          low = Math.min(low, column.height);
+          high = Math.max(high, column.height);
+        }
+        if (!plains || high - low > 3) continue;
+        // A seed-dependent tiebreak prevents every world placing its village at 0,0.
+        const score = x * x + z * z + hash(x + 17, z - 31, this.seed) * 9;
+        if (!best || score < best.score) best = { x, y: Math.round((low + high) / 2), z, score };
+      }
+    }
+    return best;
+  }
+
+  /** Flatten only the generated footprint; the blocks remain normally editable. */
+  private prepareVillageGround(x: number, z: number, groundY: number): void {
+    for (let y = 24; y > groundY; y -= 1) this.blocks.delete(key(x, y, z));
+    const top = this.topY(x, z);
+    for (let y = Math.max(0, top + 1); y < groundY; y += 1) this.set({ x, y, z }, "dirt");
+    this.set({ x, y: groundY, z }, "grass");
+  }
+
+  private buildHome(id: string, centerX: number, centerZ: number, groundY: number, entranceSide: "north" | "south"): VillageHome {
+    const minX = centerX - 2, maxX = centerX + 2, minZ = centerZ - 2, maxZ = centerZ + 2;
+    for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) {
+      this.set({ x, y: groundY, z }, "bricks");
+      for (let y = groundY + 1; y <= groundY + 4; y += 1) this.blocks.delete(key(x, y, z));
+    }
+    const doorZ = entranceSide === "north" ? minZ : maxZ;
+    for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) {
+      if (x !== minX && x !== maxX && z !== minZ && z !== maxZ) continue;
+      for (let y = groundY + 1; y <= groundY + 3; y += 1) {
+        const doorway = x === centerX && z === doorZ && y <= groundY + 2;
+        if (!doorway) this.set({ x, y, z }, (x === minX || x === maxX) && y === groundY + 2 ? "glass" : "planks");
+      }
+    }
+    for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) this.set({ x, y: groundY + 4, z }, "wood");
+    return {
+      id,
+      entrance: { x: centerX, y: groundY + 1, z: doorZ },
+      interior: { x: centerX, y: groundY + 1, z: centerZ },
+      workstation: { x: centerX + 1, y: groundY + 1, z: centerZ },
+    };
+  }
+
+  private cloneVillages(): VillageAnchor[] {
+    return this.villages.map((village) => cloneVillage(village));
   }
 
   /** Deterministic terrain height for a column in the given biome. */
