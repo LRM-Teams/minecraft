@@ -2,6 +2,7 @@ import * as THREE from "three";
 import "./style.css";
 import { createMob, updateEntities, type Mob } from "./entities";
 import { craftPlanks, createInventory, type Inventory } from "./inventory";
+import { breakDuration, isMineable } from "./mining";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
 
@@ -15,7 +16,7 @@ app.innerHTML = `
     <div id="world-time"></div>
     <div id="health"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘 · 右键放置</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘 · 右键放置</div>
     <div id="status"></div>
     <div id="hotbar"></div>
   </div>
@@ -330,6 +331,9 @@ const raycaster = new THREE.Raycaster();
 raycaster.far = 6;
 const center = new THREE.Vector2(0, 0);
 let target: { position: BlockPosition; normal: THREE.Vector3 } | undefined;
+let mineHeld = false;
+let miningKey: string | undefined;
+let miningProgress = 0;
 
 const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory });
 const persist = (): void => { saveGame(world, playerSave()); dirty = false; };
@@ -376,15 +380,43 @@ const edit = (place: boolean): void => {
   persist();
 };
 
+const stopMining = (): void => {
+  mineHeld = false;
+  miningKey = undefined;
+  miningProgress = 0;
+};
+
+const updateMining = (delta: number): void => {
+  if (!mineHeld || !target) { stopMining(); return; }
+  const { x, y, z } = target.position;
+  const key = `${x},${y},${z}`;
+  const block = world.get(x, y, z);
+  if (!block || !isMineable(block)) { stopMining(); return; }
+  if (key !== miningKey) {
+    miningKey = key;
+    miningProgress = 0;
+  }
+  miningProgress = Math.min(1, miningProgress + delta / breakDuration(block));
+  status.textContent = `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`;
+  if (miningProgress >= 1) {
+    edit(false);
+    stopMining();
+  }
+};
+
 const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); };
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
-  if (event.button === 0) edit(false);
+  if (event.button === 0) mineHeld = true;
   if (event.button === 2) edit(true);
 });
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
-document.addEventListener("pointerlockchange", () => { startScreen.classList.toggle("hidden", document.pointerLockElement === renderer.domElement); });
+document.addEventListener("mouseup", (event) => { if (event.button === 0) stopMining(); });
+document.addEventListener("pointerlockchange", () => {
+  startScreen.classList.toggle("hidden", document.pointerLockElement === renderer.domElement);
+  if (document.pointerLockElement !== renderer.domElement) stopMining();
+});
 document.addEventListener("mousemove", (event) => {
   if (document.pointerLockElement !== renderer.domElement) return;
   yaw -= event.movementX * 0.0022;
@@ -471,6 +503,7 @@ const frame = (now: number): void => {
   cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
   timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
   findTarget();
+  updateMining(delta);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 };
