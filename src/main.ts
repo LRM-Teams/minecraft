@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
+import { createGuardsForWorld, updateIronGuards, type IronGuard } from "./guards";
 import { greetNearbyVillagers, createVillagersForWorld, tradeWithVillager, updateVillagers, villagerDrop, type Villager } from "./villagers";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
@@ -252,6 +253,7 @@ const spawnMobs = (): Mob[] => [
 ];
 let mobs = spawnMobs();
 let villagers: Villager[] = createVillagersForWorld(world);
+let guards: IronGuard[] = createGuardsForWorld(world);
 const villagerMeshes = new Map<number, THREE.Group>();
 const villagerBodyGeometry = new THREE.BoxGeometry(0.76, 0.8, 0.54);
 const villagerHeadGeometry = new THREE.BoxGeometry(0.6, 0.56, 0.58);
@@ -262,6 +264,7 @@ const villagerStyle = {
   hat: new THREE.MeshLambertMaterial({ color: 0x4a3a2a }),
 };
 const mobMeshes = new Map<number, THREE.Group>();
+const guardMeshes = new Map<number, THREE.Group>();
 const mobBodyGeometry = new THREE.BoxGeometry(0.78, 0.82, 0.56);
 const mobHeadGeometry = new THREE.BoxGeometry(0.68, 0.62, 0.62);
 const mobStyles: Record<MobKind, { body: THREE.MeshLambertMaterial; head: THREE.MeshLambertMaterial; eye: THREE.MeshBasicMaterial; scale: number; bob: number }> = {
@@ -336,6 +339,73 @@ const syncMobMeshes = (): void => {
 const clearMobMeshes = (): void => {
   mobMeshes.forEach((mesh) => scene.remove(mesh));
   mobMeshes.clear();
+};
+
+const guardBodyGeometry = new THREE.BoxGeometry(0.92, 1.1, 0.62);
+const guardHeadGeometry = new THREE.BoxGeometry(0.74, 0.62, 0.66);
+const guardArmGeometry = new THREE.BoxGeometry(0.24, 1.03, 0.3);
+const guardLegGeometry = new THREE.BoxGeometry(0.27, 0.78, 0.3);
+const guardMetal = new THREE.MeshLambertMaterial({ color: 0xc5cbc9 });
+const guardJoint = new THREE.MeshLambertMaterial({ color: 0x7d8787 });
+const guardEye = new THREE.MeshBasicMaterial({ color: 0xffcc56 });
+
+/** Original broad-shouldered iron village protector, intentionally not a copied game asset. */
+const createGuardMesh = (guard: IronGuard): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(guardBodyGeometry, guardMetal);
+  body.position.y = 1.24;
+  const head = new THREE.Mesh(guardHeadGeometry, guardMetal);
+  head.position.y = 2.08;
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.11, 0.12), guardJoint);
+  brow.position.set(0, 2.27, 0.3);
+  group.add(body, head, brow);
+  [-0.62, 0.62].forEach((x) => {
+    const arm = new THREE.Mesh(guardArmGeometry, guardMetal);
+    arm.position.set(x, 1.2, 0);
+    group.add(arm);
+  });
+  [-0.23, 0.23].forEach((x) => {
+    const leg = new THREE.Mesh(guardLegGeometry, guardJoint);
+    leg.position.set(x, 0.39, 0);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.04), guardEye);
+    eye.position.set(x * 0.68, 2.08, 0.35);
+    group.add(leg, eye);
+  });
+  group.traverse((object) => {
+    object.userData.guardId = guard.id;
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
+  scene.add(group);
+  return group;
+};
+
+const syncGuardMeshes = (): void => {
+  guards.forEach((guard) => {
+    if (guard.dead) {
+      const mesh = guardMeshes.get(guard.id);
+      if (mesh) scene.remove(mesh);
+      guardMeshes.delete(guard.id);
+      return;
+    }
+    let mesh = guardMeshes.get(guard.id);
+    if (!mesh) {
+      mesh = createGuardMesh(guard);
+      guardMeshes.set(guard.id, mesh);
+    }
+    if (Number.isFinite(guard.y)) mesh.position.set(guard.x, guard.y, guard.z);
+    mesh.rotation.y = guard.facing;
+  });
+};
+
+const clearGuardMeshes = (): void => {
+  guardMeshes.forEach((mesh) => scene.remove(mesh));
+  guardMeshes.clear();
+};
+
+const spawnGuards = (): void => {
+  clearGuardMeshes();
+  guards = createGuardsForWorld(world);
 };
 
 const createVillagerMesh = (villager: Villager): THREE.Group => {
@@ -528,6 +598,7 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   clearMobMeshes();
   mobs = spawnMobs();
   spawnVillagers();
+  spawnGuards();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
@@ -571,7 +642,7 @@ const findTarget = (): void => {
 /** A mob is hittable only when it is the first object under the crosshair. */
 const attackMobAtCrosshair = (): boolean => {
   raycaster.setFromCamera(center, camera);
-  const entities = raycaster.intersectObjects([...mobMeshes.values(), ...villagerMeshes.values()], true);
+  const entities = raycaster.intersectObjects([...mobMeshes.values(), ...villagerMeshes.values(), ...guardMeshes.values()], true);
   const entityHit = entities[0];
   if (!entityHit) return false;
   const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
@@ -579,6 +650,7 @@ const attackMobAtCrosshair = (): boolean => {
 
   const mobId = entityHit.object.userData.mobId as number | undefined;
   const villagerId = entityHit.object.userData.villagerId as number | undefined;
+  const guardId = entityHit.object.userData.guardId as number | undefined;
 
   if (mobId !== undefined) {
     const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
@@ -605,6 +677,15 @@ const attackMobAtCrosshair = (): boolean => {
     } else {
       status.textContent = `村民受伤 · ${villager.hp}/${villager.maxHp}`;
     }
+    return true;
+  }
+
+  if (guardId !== undefined) {
+    const guard = guards.find((candidate) => candidate.id === guardId && !candidate.dead);
+    if (!guard) return false;
+    guard.hp = Math.max(0, guard.hp - 4);
+    soundscape.play("hit");
+    status.textContent = guard.hp > 0 ? `守卫受损 · ${guard.hp}/${guard.maxHp}` : "铁傀儡守卫已倒下";
     return true;
   }
 
@@ -697,6 +778,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   clearMobMeshes();
   mobs = spawnMobs();
   spawnVillagers();
+  spawnGuards();
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -949,6 +1031,12 @@ const updateMobs = (delta: number): void => {
   syncMobMeshes();
 };
 
+const updateGuards = (delta: number): void => {
+  const { defeated } = updateIronGuards(world, guards, mobs, delta);
+  if (defeated.length) status.textContent = `铁傀儡守卫击退了 ${defeated.length} 个敌对生物`;
+  syncGuardMeshes();
+};
+
 let villagerGreetedId: number | undefined;
 
 const updateVillagersLoop = (delta: number): void => {
@@ -988,6 +1076,7 @@ const frame = (now: number): void => {
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
     updateMobs(delta);
+    updateGuards(delta);
     updateVillagersLoop(delta);
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
