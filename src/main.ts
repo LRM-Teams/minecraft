@@ -168,9 +168,8 @@ class BlockRenderer {
     this.meshes.clear();
     this.positions.clear();
     BLOCK_TYPES.forEach((type) => this.positions.set(type, []));
-    world.blocks.forEach((type, position) => {
-      const [x, y, z] = position.split(",").map(Number);
-      this.positions.get(type)?.push({ x, y, z });
+    world.visibleBlocks().forEach(({ type, position }) => {
+      this.positions.get(type)?.push(position);
     });
     BLOCK_TYPES.forEach((type) => {
       const positions = this.positions.get(type) ?? [];

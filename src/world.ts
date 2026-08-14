@@ -3,6 +3,10 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type BlockPosition = { x: number; y: number; z: number };
 export type WorldSnapshot = { seed: number; blocks: [string, BlockType][] };
+const NEIGHBORS: BlockPosition[] = [
+  { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
+  { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
+];
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
 const hash = (x: number, z: number, seed: number) => {
@@ -45,6 +49,20 @@ export class VoxelWorld {
   topY(x: number, z: number): number {
     for (let y = 24; y >= 0; y -= 1) if (this.isSolid(x, y, z)) return y;
     return -1;
+  }
+
+  /** Blocks fully surrounded by opaque neighbours do not contribute to the view. */
+  visibleBlocks(): { position: BlockPosition; type: BlockType }[] {
+    const visible: { position: BlockPosition; type: BlockType }[] = [];
+    this.blocks.forEach((type, positionKey) => {
+      const [x, y, z] = positionKey.split(",").map(Number);
+      const exposed = NEIGHBORS.some((offset) => {
+        const neighbour = this.get(x + offset.x, y + offset.y, z + offset.z);
+        return neighbour === undefined || (neighbour === "water" && type !== "water");
+      });
+      if (exposed) visible.push({ position: { x, y, z }, type });
+    });
+    return visible;
   }
 
   snapshot(): WorldSnapshot {

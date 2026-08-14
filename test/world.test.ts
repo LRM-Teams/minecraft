@@ -23,4 +23,16 @@ describe("VoxelWorld", () => {
     expect(world.isSolid(0, 12, 0)).toBe(false);
     expect(world.topY(0, 0)).toBeLessThan(12);
   });
+
+  it("omits fully buried blocks from the renderable set", () => {
+    const world = new VoxelWorld(7, 2);
+    world.blocks.clear();
+    world.set({ x: 0, y: 1, z: 0 }, "stone");
+    [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].forEach(([x, y, z]) => {
+      world.set({ x, y: y + 1, z }, "stone");
+    });
+    expect(world.visibleBlocks().some(({ position }) => position.x === 0 && position.y === 1 && position.z === 0)).toBe(false);
+    world.remove({ x: 1, y: 1, z: 0 });
+    expect(world.visibleBlocks().some(({ position }) => position.x === 0 && position.y === 1 && position.z === 0)).toBe(true);
+  });
 });
