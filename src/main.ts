@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import "./style.css";
 import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
+import { greetNearbyVillagers, createVillagersForWorld, tradeWithVillager, updateVillagers, villagerDrop, type Villager } from "./villagers";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
@@ -250,6 +251,16 @@ const spawnMobs = (): Mob[] => [
   createMob(3, 8, -6, { kind: "wisp" }),
 ];
 let mobs = spawnMobs();
+let villagers: Villager[] = createVillagersForWorld(world);
+const villagerMeshes = new Map<number, THREE.Group>();
+const villagerBodyGeometry = new THREE.BoxGeometry(0.76, 0.8, 0.54);
+const villagerHeadGeometry = new THREE.BoxGeometry(0.6, 0.56, 0.58);
+const villagerStyle = {
+  robe: new THREE.MeshLambertMaterial({ color: 0x6f8f6a }),
+  head: new THREE.MeshLambertMaterial({ color: 0xd8a06a }),
+  eye: new THREE.MeshBasicMaterial({ color: 0x3a2f24 }),
+  hat: new THREE.MeshLambertMaterial({ color: 0x4a3a2a }),
+};
 const mobMeshes = new Map<number, THREE.Group>();
 const mobBodyGeometry = new THREE.BoxGeometry(0.78, 0.82, 0.56);
 const mobHeadGeometry = new THREE.BoxGeometry(0.68, 0.62, 0.62);
@@ -325,6 +336,58 @@ const syncMobMeshes = (): void => {
 const clearMobMeshes = (): void => {
   mobMeshes.forEach((mesh) => scene.remove(mesh));
   mobMeshes.clear();
+};
+
+const createVillagerMesh = (villager: Villager): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(villagerBodyGeometry, villagerStyle.robe);
+  body.position.y = 0.44;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  const head = new THREE.Mesh(villagerHeadGeometry, villagerStyle.head);
+  head.position.y = 1.1;
+  head.castShadow = true;
+  head.receiveShadow = true;
+  const hat = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.14, 0.66), villagerStyle.hat);
+  hat.position.y = 1.44;
+  group.add(body, head, hat);
+  [-0.14, 0.14].forEach((x) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.04), villagerStyle.eye);
+    eye.position.set(x, 1.12, 0.32);
+    group.add(eye);
+  });
+  group.traverse((object) => { object.userData.villagerId = villager.id; });
+  scene.add(group);
+  return group;
+};
+
+/** Rebuild the villager population from the current world's village anchors. */
+const spawnVillagers = (): void => {
+  clearVillagerMeshes();
+  villagers = createVillagersForWorld(world);
+};
+
+const syncVillagerMeshes = (): void => {
+  villagers.forEach((villager) => {
+    if (villager.dead) {
+      const mesh = villagerMeshes.get(villager.id);
+      if (mesh) scene.remove(mesh);
+      villagerMeshes.delete(villager.id);
+      return;
+    }
+    let mesh = villagerMeshes.get(villager.id);
+    if (!mesh) {
+      mesh = createVillagerMesh(villager);
+      villagerMeshes.set(villager.id, mesh);
+    }
+    if (Number.isFinite(villager.y)) mesh.position.set(villager.x, villager.y, villager.z);
+    mesh.rotation.y = villager.facing;
+  });
+};
+
+const clearVillagerMeshes = (): void => {
+  villagerMeshes.forEach((mesh) => scene.remove(mesh));
+  villagerMeshes.clear();
 };
 
 const selection = new THREE.LineSegments(
@@ -464,6 +527,7 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   world = VoxelWorld.fromSnapshot(snapshot);
   clearMobMeshes();
   mobs = spawnMobs();
+  spawnVillagers();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
@@ -507,17 +571,44 @@ const findTarget = (): void => {
 /** A mob is hittable only when it is the first object under the crosshair. */
 const attackMobAtCrosshair = (): boolean => {
   raycaster.setFromCamera(center, camera);
-  const mobHit = raycaster.intersectObjects([...mobMeshes.values()], true)[0];
-  if (!mobHit) return false;
+  const entities = raycaster.intersectObjects([...mobMeshes.values(), ...villagerMeshes.values()], true);
+  const entityHit = entities[0];
+  if (!entityHit) return false;
   const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
-  if (blockHit && blockHit.distance < mobHit.distance) return false;
-  const mobId = mobHit.object.userData.mobId as number | undefined;
-  const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
-  if (!mob) return false;
-  mob.hp = Math.max(0, mob.hp - 4);
-  soundscape.play("hit");
-  status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
-  return true;
+  if (blockHit && blockHit.distance < entityHit.distance) return false;
+
+  const mobId = entityHit.object.userData.mobId as number | undefined;
+  const villagerId = entityHit.object.userData.villagerId as number | undefined;
+
+  if (mobId !== undefined) {
+    const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
+    if (!mob) return false;
+    mob.hp = Math.max(0, mob.hp - 4);
+    soundscape.play("hit");
+    status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
+    return true;
+  }
+
+  if (villagerId !== undefined) {
+    const villager = villagers.find((candidate) => candidate.id === villagerId && !candidate.dead);
+    if (!villager) return false;
+    villager.hp = Math.max(0, villager.hp - 8);
+    soundscape.play("hit");
+    if (villager.hp <= 0) {
+      // A friendly villager is down: drop a collectible block into the bag.
+      villager.dead = true;
+      const drop = villagerDrop();
+      inventory[drop] += 1;
+      renderHotbar();
+      dirty = true;
+      status.textContent = `村民已倒下，掉落 ${labels[drop]}`;
+    } else {
+      status.textContent = `村民受伤 · ${villager.hp}/${villager.maxHp}`;
+    }
+    return true;
+  }
+
+  return false;
 };
 
 const intersectsPlayer = (position: BlockPosition): boolean => {
@@ -605,6 +696,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   stopMining();
   clearMobMeshes();
   mobs = spawnMobs();
+  spawnVillagers();
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -771,6 +863,10 @@ document.addEventListener("keydown", (event) => {
     const village = world.village;
     status.textContent = village ? `村庄广场坐标：${village.center.x}, ${village.center.z}` : "当前世界没有可用村庄选址";
   }
+  if (event.code === "KeyE" && !event.repeat) {
+    soundscape.unlock();
+    interactVillager();
+  }
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
     if (enabled) soundscape.unlock();
@@ -853,12 +949,46 @@ const updateMobs = (delta: number): void => {
   syncMobMeshes();
 };
 
+let villagerGreetedId: number | undefined;
+
+const updateVillagersLoop = (delta: number): void => {
+  updateVillagers(world, villagers, camera.position, delta);
+  // Interaction 1 — proximity greeting (surfaced once per villager approached).
+  const near = greetNearbyVillagers(villagers, camera.position);
+  const nearId = near ? villagers.find((v) => !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange)?.id : undefined;
+  if (near && nearId !== villagerGreetedId) {
+    villagerGreetedId = nearId;
+    status.textContent = near;
+  } else if (!near) {
+    villagerGreetedId = undefined;
+  }
+  syncVillagerMeshes();
+};
+
+/** Interaction 2 — barter the selected hotbar block with a nearby villager. */
+const interactVillager = (): void => {
+  const type = BLOCK_TYPES[selected];
+  if (!type) return;
+  const targetVillager = villagers.find((v) =>
+    !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange,
+  );
+  if (!targetVillager) { status.textContent = "附近没有村民"; return; }
+  const result = tradeWithVillager(targetVillager, type, inventory, camera.position);
+  status.textContent = result.message;
+  if (result.ok) {
+    soundscape.play("pickup");
+    renderHotbar();
+    dirty = true;
+  }
+};
+
 const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
     updateMobs(delta);
+    updateVillagersLoop(delta);
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
       room.announcePlayer();
