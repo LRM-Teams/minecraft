@@ -3,6 +3,7 @@ import "./style.css";
 import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
 import { createGuardiansForWorld, updateGuardians, type VillageGuardian } from "./guardians";
 import { greetNearbyVillagers, createVillagersForWorld, tradeWithVillager, updateVillagers, villagerDrop, type Villager } from "./villagers";
+import { createRaid, updateRaid, shouldStartRaid, raidProgress, type Raid } from "./raids";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
@@ -23,6 +24,7 @@ app.innerHTML = `
     <div id="network-state"></div>
     <div id="village-state"></div>
     <div id="guardian-state"></div>
+    <div id="raid-state"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
@@ -255,6 +257,8 @@ const spawnMobs = (): Mob[] => [
 let mobs = spawnMobs();
 let villagers: Villager[] = createVillagersForWorld(world);
 let guardians: VillageGuardian[] = createGuardiansForWorld(world);
+let raids: Raid[] = [];
+let nextRaidId = 1;
 const villagerMeshes = new Map<number, THREE.Group>();
 const villagerBodyGeometry = new THREE.BoxGeometry(0.76, 0.8, 0.54);
 const villagerHeadGeometry = new THREE.BoxGeometry(0.6, 0.56, 0.58);
@@ -289,8 +293,15 @@ const mobStyles: Record<MobKind, { body: THREE.MeshLambertMaterial; head: THREE.
     scale: 0.8,
     bob: 0.18,
   },
+  raider: {
+    body: new THREE.MeshLambertMaterial({ color: 0x5b3a2e }),
+    head: new THREE.MeshLambertMaterial({ color: 0x6e4433 }),
+    eye: new THREE.MeshBasicMaterial({ color: 0xd8ff4a }),
+    scale: 1.05,
+    bob: 0,
+  },
 };
-const mobNames: Record<MobKind, string> = { stalker: "巡游者", brute: "巨岩怪", wisp: "夜光灵" };
+const mobNames: Record<MobKind, string> = { stalker: "巡游者", brute: "巨岩怪", wisp: "夜光灵", raider: "掠夺者" };
 
 const createMobMesh = (mob: Mob): THREE.Group => {
   const group = new THREE.Group();
@@ -481,6 +492,7 @@ const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
 const guardianText = document.querySelector<HTMLDivElement>("#guardian-state")!;
+const raidText = document.querySelector<HTMLDivElement>("#raid-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -508,6 +520,11 @@ const renderVillageState = (): void => {
 const renderGuardianState = (): void => {
   const living = guardians.filter((guardian) => !guardian.dead).length;
   guardianText.textContent = living ? `村庄守卫 · ${living} 名巡逻中` : "村庄守卫 · 此世界暂无驻守";
+};
+
+const renderRaidState = (): void => {
+  const activeRaid = raids.find((raid) => raid.active && !raid.defeated);
+  raidText.textContent = activeRaid ? raidProgress(activeRaid) : "";
 };
 renderVillageState();
 renderGuardianState();
@@ -608,6 +625,9 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   mobs = spawnMobs();
   spawnVillagers();
   spawnGuardians();
+  raids = [];
+  raidCooldown = 0;
+  renderRaidState();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
@@ -778,6 +798,9 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   mobs = spawnMobs();
   spawnVillagers();
   spawnGuardians();
+  raids = [];
+  raidCooldown = 0;
+  renderRaidState();
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -1069,6 +1092,37 @@ const interactVillager = (): void => {
   }
 };
 
+/** Seconds a freshly-cleared village waits before the next night raid. */
+let raidCooldown = 0;
+
+/** Nighttime raid waves assaulting the village, cleared by player/guard/villagers. */
+const updateRaidsLoop = (delta: number): void => {
+  raidCooldown = Math.max(0, raidCooldown - delta);
+
+  // Advance live raids and detect a fresh clear so we can announce + cool down.
+  let newlyCleared = false;
+  for (const raid of raids) {
+    const wasActive = raid.active && !raid.defeated;
+    updateRaid(raid, world, mobs, delta);
+    if (wasActive && raid.defeated) newlyCleared = true;
+  }
+  if (newlyCleared) {
+    raidCooldown = 30;
+    soundscape.play("pickup");
+    status.textContent = "袭击已击退，村庄恢复平静";
+  }
+  raids = raids.filter((raid) => raid.active && !raid.defeated);
+
+  // Start a fresh raid at night once the field is clear and the cooldown has passed.
+  const dayProgressNow = (performance.now() % 150000) / 150000;
+  const isNight = Math.sin(dayProgressNow * Math.PI * 2) * 0.5 + 0.5 < 0.22;
+  if (isNight && raids.length === 0 && world.villages.length && raidCooldown <= 0) {
+    raids.push(createRaid(nextRaidId++, world.villages[0]));
+  }
+
+  renderRaidState();
+};
+
 const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
@@ -1077,6 +1131,7 @@ const frame = (now: number): void => {
     updateMobs(delta);
     updateGuardiansLoop(delta);
     updateVillagersLoop(delta);
+    updateRaidsLoop(delta);
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
       room.announcePlayer();
