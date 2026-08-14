@@ -5,7 +5,8 @@ import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory }
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
-import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
+import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
+import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -17,6 +18,7 @@ app.innerHTML = `
     <div id="world-time"></div>
     <div id="health"></div>
     <div id="audio-state"></div>
+    <div id="network-state"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴</div>
     <div id="status"></div>
@@ -38,6 +40,13 @@ app.innerHTML = `
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
       <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效</p>
+      <section id="multiplayer-panel">
+        <strong>本地联机房间</strong>
+        <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
+        <div class="room-fields"><input id="player-name" maxlength="18" placeholder="玩家名" autocomplete="nickname"><input id="room-code" maxlength="24" placeholder="房间码，例如 forest-42" autocomplete="off"></div>
+        <button id="join-room" class="room-button">创建 / 加入房间</button>
+        <small id="room-status">未加入房间 · 适合双标签页试玩</small>
+      </section>
       <section id="world-slots">
         <div class="world-slots-head"><strong>本地世界</strong><button id="new-world" class="world-new">＋ 新建</button></div>
         <div id="world-list"></div>
@@ -332,11 +341,16 @@ const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
+const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 const worldList = document.querySelector<HTMLDivElement>("#world-list")!;
 const newWorldButton = document.querySelector<HTMLButtonElement>("#new-world")!;
+const roomCodeInput = document.querySelector<HTMLInputElement>("#room-code")!;
+const playerNameInput = document.querySelector<HTMLInputElement>("#player-name")!;
+const joinRoomButton = document.querySelector<HTMLButtonElement>("#join-room")!;
+const roomStatus = document.querySelector<HTMLElement>("#room-status")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
 const maxPlayerHealth = 10;
@@ -399,6 +413,54 @@ let verticalVelocity = 0;
 let grounded = false;
 let lastTime = performance.now();
 let dirty = false;
+let room: MultiplayerRoom | undefined;
+let awaitingRoomSnapshot = false;
+let nextNetworkBroadcast = 0;
+const remotePlayers = new Map<string, PlayerState>();
+const remotePlayerMeshes = new Map<string, THREE.Group>();
+const remotePlayerBody = new THREE.BoxGeometry(0.62, 0.78, 0.42);
+const remotePlayerHead = new THREE.BoxGeometry(0.52, 0.5, 0.5);
+const remotePlayerMaterial = new THREE.MeshLambertMaterial({ color: 0x5d9cce });
+const remotePlayerHeadMaterial = new THREE.MeshLambertMaterial({ color: 0xf0b779 });
+const playerSessionKey = "voxel-atelier-player-id";
+const savedRoomKey = "voxel-atelier-room";
+const updateNetworkStatus = (): void => {
+  const count = remotePlayers.size + (room ? 1 : 0);
+  networkText.textContent = room ? `联机 ${room.id} · ${count} 人` : "单人世界";
+};
+const clearRemotePlayers = (): void => {
+  remotePlayerMeshes.forEach((mesh) => scene.remove(mesh));
+  remotePlayerMeshes.clear();
+  remotePlayers.clear();
+  updateNetworkStatus();
+};
+const syncRemotePlayers = (): void => {
+  remotePlayers.forEach((player, id) => {
+    let mesh = remotePlayerMeshes.get(id);
+    if (!mesh) {
+      mesh = new THREE.Group();
+      const body = new THREE.Mesh(remotePlayerBody, remotePlayerMaterial);
+      body.position.y = 0.39;
+      const head = new THREE.Mesh(remotePlayerHead, remotePlayerHeadMaterial);
+      head.position.y = 1.01;
+      mesh.add(body, head);
+      remotePlayerMeshes.set(id, mesh);
+      scene.add(mesh);
+    }
+    mesh.position.set(player.position[0], player.position[1] - 1.72, player.position[2]);
+    mesh.rotation.y = player.yaw;
+  });
+  updateNetworkStatus();
+};
+const localPlayer = (): PlayerState => newPlayer(playerNameInput.value, camera.position.toArray() as [number, number, number], yaw, pitch, sessionStorage.getItem(playerSessionKey) ?? undefined);
+const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
+  world = VoxelWorld.fromSnapshot(snapshot);
+  clearMobMeshes();
+  mobs = spawnMobs();
+  syncRenderedChunks(true);
+  seedText.textContent = `WORLD SEED · ${world.seed}`;
+  dirty = true;
+};
 const raycaster = new THREE.Raycaster();
 raycaster.far = 6;
 const center = new THREE.Vector2(0, 0);
@@ -463,6 +525,7 @@ const edit = (place: boolean): void => {
     if (removed) {
       inventory[removed] += 1;
       soundscape.play("break");
+      room?.sendEdit({ action: "remove", position: target.position });
     }
   } else {
     const type = BLOCK_TYPES[selected];
@@ -472,6 +535,7 @@ const edit = (place: boolean): void => {
       world.set(position, type);
       inventory[type] -= 1;
       soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
     }
   }
   refreshWorld();
@@ -592,6 +656,55 @@ newWorldButton.addEventListener("click", () => {
   if (name !== null) createNewWorld(name);
 });
 
+const joinRoom = (): void => {
+  const roomCode = normalizeRoomCode(roomCodeInput.value);
+  roomCodeInput.value = roomCode;
+  if (roomCode.length < 3) {
+    roomStatus.textContent = "房间码至少需要 3 个字母、数字或连字符";
+    return;
+  }
+  room?.dispose();
+  clearRemotePlayers();
+  awaitingRoomSnapshot = true;
+  const player = localPlayer();
+  sessionStorage.setItem(playerSessionKey, player.id);
+  sessionStorage.setItem(savedRoomKey, roomCode);
+  room = new MultiplayerRoom(roomCode, player, {
+    onHello: () => {
+      room?.sendSnapshot(world.snapshot());
+      room?.announcePlayer();
+    },
+    onLeave: (playerId) => {
+      const mesh = remotePlayerMeshes.get(playerId);
+      if (mesh) scene.remove(mesh);
+      remotePlayerMeshes.delete(playerId);
+      remotePlayers.delete(playerId);
+      updateNetworkStatus();
+    },
+    onPlayer: (playerState) => {
+      remotePlayers.set(playerState.id, playerState);
+      syncRemotePlayers();
+    },
+    onEdit: (edit) => {
+      if (edit.action === "place" && edit.type) world.set(edit.position, edit.type);
+      if (edit.action === "remove") world.remove(edit.position);
+      refreshWorld();
+    },
+    onSnapshot: (snapshot) => {
+      if (!awaitingRoomSnapshot) return;
+      awaitingRoomSnapshot = false;
+      applyRoomSnapshot(snapshot);
+      roomStatus.textContent = `已加入 ${roomCode} · 已同步世界状态`;
+    },
+  });
+  roomStatus.textContent = `已加入 ${roomCode} · 正在寻找其他玩家`;
+  updateNetworkStatus();
+};
+joinRoomButton.addEventListener("click", joinRoom);
+roomCodeInput.value = sessionStorage.getItem(savedRoomKey) ?? "";
+playerNameInput.value = sessionStorage.getItem("voxel-atelier-player-name") ?? "探索者";
+playerNameInput.addEventListener("change", () => sessionStorage.setItem("voxel-atelier-player-name", playerNameInput.value.trim().slice(0, 18)));
+
 if (!activeWorldId) activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
 renderWorldSlots();
 
@@ -668,7 +781,8 @@ resetButton.addEventListener("click", () => {
     createNewWorld("世界 1");
   }
 });
-addEventListener("beforeunload", () => { if (dirty) persist(); });
+addEventListener("beforeunload", () => { if (dirty) persist(); room?.dispose(); });
+addEventListener("online", () => { room?.reconnect(); roomStatus.textContent = room ? `已重连 ${room.id} · 正在恢复状态` : roomStatus.textContent; });
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -732,6 +846,11 @@ const frame = (now: number): void => {
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
     updateMobs(delta);
+    if (room && now >= nextNetworkBroadcast) {
+      room.updateLocalPlayer(localPlayer());
+      room.announcePlayer();
+      nextNetworkBroadcast = now + 100;
+    }
   }
   syncRenderedChunks();
   const dayProgress = (now % 150000) / 150000;
