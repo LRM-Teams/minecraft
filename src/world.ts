@@ -1,6 +1,7 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
+import { addVillage, type VillageHouseAnchor, type VillageLayout } from "./village";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "door"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export const CHUNK_SIZE = 16;
 
@@ -22,11 +23,15 @@ export class VoxelWorld {
   readonly blocks = new Map<string, BlockType>();
   readonly size: number;
   readonly seed: number;
+  /** Generated building data, reserved for future villager spawning and paths. */
+  readonly villages: readonly VillageLayout[];
 
   constructor(seed = 72831, size = 48) {
     this.seed = seed;
     this.size = size;
     this.generate();
+    const village = addVillage(this, this.seed, this.size, (x, z) => this.columnHeight(x, z, biomeAt(x, z, this.seed)));
+    this.villages = village ? [village] : [];
   }
 
   get(x: number, y: number, z: number): BlockType | undefined {
@@ -35,7 +40,9 @@ export class VoxelWorld {
 
   isSolid(x: number, y: number, z: number): boolean {
     const block = this.get(x, y, z);
-    return block !== undefined && block !== "water";
+    // Doors render as an interactive visual block but leave their doorway
+    // passable, so generated rooms can be entered without modifying terrain.
+    return block !== undefined && block !== "water" && block !== "door";
   }
 
   set(position: BlockPosition, type: BlockType): void {
@@ -52,6 +59,11 @@ export class VoxelWorld {
   topY(x: number, z: number): number {
     for (let y = 24; y >= 0; y -= 1) if (this.isSolid(x, y, z)) return y;
     return -1;
+  }
+
+  /** Stable house/entrance anchors consumed by a future villager system. */
+  houseAnchors(): readonly VillageHouseAnchor[] {
+    return this.villages.flatMap((village) => village.houses);
   }
 
   /** The mathematical chunk containing a world coordinate. */

@@ -112,9 +112,10 @@ const colors: Record<BlockType, number> = {
   water: 0x3d8ec9,
   bricks: 0x9b5341,
   glass: 0x9edfe5,
+  door: 0x6e4127,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", door: "木门",
 };
 
 type BlockFace = "side" | "top" | "bottom";
@@ -161,6 +162,7 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
       if (type === "planks" && (y % 6 === 0 || x === 0 || x === 8)) paint(base.clone().multiplyScalar(0.55), x, y, type === "planks" ? 2 : 1, type === "planks" ? 1 : 1);
       else if (type === "wood" && (x % 5 === 0 || (face === "top" && noise(x, y) > 0.66))) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
+      else if (type === "door" && (x === 2 || x === 13 || y === 2 || y === 13 || (x === 10 && y === 8))) paint(base.clone().multiplyScalar(0.5), x, y, 2, 2);
       else if (type === "bricks" && (y % 4 === 0 || (x + Math.floor(y / 4) * 4) % 8 === 0)) paint(base.clone().multiplyScalar(0.58), x, y, 2, 1);
       else if (type === "glass" && (x === y || x + y === 14 || noise(x, y) > 0.82)) paint(base.clone().multiplyScalar(1.22), x, y, 1, 1);
       else if (type === "water" && y % 5 === 0) paint(base.clone().multiplyScalar(1.3), x, y, 2, 1);
