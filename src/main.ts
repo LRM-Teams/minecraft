@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
+import { createMob, updateEntities, type Mob } from "./entities";
 import { craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
@@ -13,8 +14,9 @@ app.innerHTML = `
     <div id="brand">VOXEL <span>ATELIER</span></div>
     <div id="seed"></div>
     <div id="world-time"></div>
+    <div id="health"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘 · 右键放置</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置</div>
     <div id="status"></div>
     <div id="hotbar"></div>
   </div>
@@ -24,7 +26,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–8 / 滚轮切换方块<br/>C：1 原木合成 4 木板</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–8 / 滚轮切换方块　C：1 原木合成 4 木板</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
@@ -211,6 +213,63 @@ const saved = loadSave();
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
 const blocks = new BlockRenderer();
 
+const spawnMobs = (): Mob[] => [
+  createMob(1, 5, 2, { hp: 12, speed: 2.05, aggroRange: 6.5 }),
+  createMob(2, -6, -5, { hp: 12, speed: 2.2, aggroRange: 7 }),
+  createMob(3, 8, -6, { hp: 16, speed: 1.9, aggroRange: 7.5 }),
+];
+let mobs = spawnMobs();
+const mobMeshes = new Map<number, THREE.Group>();
+const mobBodyGeometry = new THREE.BoxGeometry(0.78, 0.82, 0.56);
+const mobHeadGeometry = new THREE.BoxGeometry(0.68, 0.62, 0.62);
+const mobBodyMaterial = new THREE.MeshLambertMaterial({ color: 0x59645a });
+const mobHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x7d8a7c });
+const mobEyeMaterial = new THREE.MeshBasicMaterial({ color: 0xf3534d });
+
+const createMobMesh = (mob: Mob): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(mobBodyGeometry, mobBodyMaterial);
+  body.position.y = 0.42;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  const head = new THREE.Mesh(mobHeadGeometry, mobHeadMaterial);
+  head.position.y = 1.05;
+  head.castShadow = true;
+  head.receiveShadow = true;
+  group.add(body, head);
+  [-0.18, 0.18].forEach((x) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), mobEyeMaterial);
+    eye.position.set(x, 1.1, 0.33);
+    group.add(eye);
+  });
+  group.traverse((object) => { object.userData.mobId = mob.id; });
+  scene.add(group);
+  return group;
+};
+
+const syncMobMeshes = (): void => {
+  mobs.forEach((mob) => {
+    if (mob.dead) {
+      const mesh = mobMeshes.get(mob.id);
+      if (mesh) scene.remove(mesh);
+      mobMeshes.delete(mob.id);
+      return;
+    }
+    let mesh = mobMeshes.get(mob.id);
+    if (!mesh) {
+      mesh = createMobMesh(mob);
+      mobMeshes.set(mob.id, mesh);
+    }
+    if (Number.isFinite(mob.y)) mesh.position.set(mob.x, mob.y, mob.z);
+    mesh.rotation.y = mob.facing;
+  });
+};
+
+const clearMobMeshes = (): void => {
+  mobMeshes.forEach((mesh) => scene.remove(mesh));
+  mobMeshes.clear();
+};
+
 const selection = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012, 1.012, 1.012)),
   new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }),
@@ -224,10 +283,13 @@ const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
+const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
+const maxPlayerHealth = 10;
+let playerHealth = maxPlayerHealth;
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
 const initialY = world.topY(0, 0) + 1.72;
@@ -254,6 +316,11 @@ const renderHotbar = (): void => {
   status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}` : "空槽";
 };
 renderHotbar();
+
+const renderHealth = (): void => {
+  healthText.textContent = `生命 ${"♥".repeat(playerHealth)}${"♡".repeat(maxPlayerHealth - playerHealth)}`;
+};
+renderHealth();
 
 const keys = new Set<string>();
 let verticalVelocity = 0;
@@ -286,6 +353,21 @@ const findTarget = (): void => {
   target = { position, normal };
   selection.visible = true;
   selection.position.set(position.x, position.y, position.z);
+};
+
+/** A mob is hittable only when it is the first object under the crosshair. */
+const attackMobAtCrosshair = (): boolean => {
+  raycaster.setFromCamera(center, camera);
+  const mobHit = raycaster.intersectObjects([...mobMeshes.values()], true)[0];
+  if (!mobHit) return false;
+  const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
+  if (blockHit && blockHit.distance < mobHit.distance) return false;
+  const mobId = mobHit.object.userData.mobId as number | undefined;
+  const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
+  if (!mob) return false;
+  mob.hp = Math.max(0, mob.hp - 4);
+  status.textContent = mob.hp > 0 ? `命中敌对体 · ${mob.hp}/${mob.maxHp}` : "敌对体已击倒";
+  return true;
 };
 
 const intersectsPlayer = (position: BlockPosition): boolean => {
@@ -341,7 +423,7 @@ const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); }
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
-  if (event.button === 0) mineHeld = true;
+  if (event.button === 0 && !attackMobAtCrosshair()) mineHeld = true;
   if (event.button === 2) edit(true);
 });
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -381,10 +463,14 @@ resetButton.addEventListener("click", () => {
   clearSave();
   world = new VoxelWorld(Math.floor(Math.random() * 999999));
   inventory = createInventory();
+  clearMobMeshes();
+  mobs = spawnMobs();
+  playerHealth = maxPlayerHealth;
   camera.position.set(0, world.topY(0, 0) + 1.72, 8);
   verticalVelocity = 0;
   refreshWorld();
   renderHotbar();
+  renderHealth();
 });
 addEventListener("beforeunload", () => { if (dirty) persist(); });
 addEventListener("resize", () => {
@@ -414,10 +500,36 @@ const updatePlayer = (delta: number): void => {
   if (camera.position.y < -8) camera.position.set(0, world.topY(0, 0) + 1.72, 8);
 };
 
+const updateMobs = (delta: number): void => {
+  const { damageToPlayer, drops } = updateEntities(world, mobs, camera.position, delta);
+  if (drops.length) {
+    drops.forEach((drop) => { inventory[drop] += 1; });
+    renderHotbar();
+    dirty = true;
+    status.textContent = `获得 ${drops.map((drop) => labels[drop]).join("、")}`;
+  }
+  if (damageToPlayer > 0) {
+    playerHealth = Math.max(0, playerHealth - damageToPlayer);
+    if (playerHealth === 0) {
+      playerHealth = maxPlayerHealth;
+      camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+      verticalVelocity = 0;
+      status.textContent = "生命耗尽，已在起点重生";
+    } else {
+      status.textContent = `受到 ${damageToPlayer} 点伤害`;
+    }
+    renderHealth();
+  }
+  syncMobMeshes();
+};
+
 const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
-  if (document.pointerLockElement === renderer.domElement) updatePlayer(delta);
+  if (document.pointerLockElement === renderer.domElement) {
+    updatePlayer(delta);
+    updateMobs(delta);
+  }
   syncRenderedChunks();
   const dayProgress = (now % 150000) / 150000;
   const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
