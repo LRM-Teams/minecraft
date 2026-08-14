@@ -9,6 +9,8 @@ import {
   greetNearbyVillagers,
   villagerDrop,
   barterReward,
+  PROFESSION_DETAILS,
+  tradeSummary,
   type Villager,
 } from "../src/villagers";
 
@@ -36,6 +38,7 @@ describe("villagers", () => {
       expect(Math.round(v.z)).toBe(home.entrance.z);
       expect(v.state).toBe("wander");
       expect(v.dead).toBe(false);
+      expect(PROFESSION_DETAILS[v.profession].offers.length).toBeGreaterThan(0);
     });
   });
 
@@ -93,6 +96,17 @@ describe("villagers", () => {
     expect(Math.abs(villager.facing - expected) % (Math.PI * 2)).toBeLessThan(0.02);
   });
 
+  it("returns to its deterministic workstation after the player leaves", () => {
+    const world = worldWithVillage();
+    const home = world.villages[0].homes[0];
+    const villager = createVillager(1, home.entrance.x, home.entrance.z, home, { x: home.entrance.x, z: home.entrance.z });
+    updateVillagers(world, [villager], { x: villager.x + 0.3, y: 5, z: villager.z }, 0.1);
+    expect(villager.state).toBe("interacting");
+    updateVillagers(world, [villager], { x: 9999, y: 5, z: 9999 }, 0.4);
+    expect(villager.state).toBe("returnWork");
+    expect(Math.hypot(villager.x - home.workstation.x, villager.z - home.workstation.z)).toBeLessThan(3);
+  });
+
   it("greets the player only when it is within interact range", () => {
     const world = worldWithVillage();
     const village = world.villages[0];
@@ -112,6 +126,17 @@ describe("villagers", () => {
     expect(result.message).toContain("交换成功");
     expect(inventory.wood).toBe(2);
     expect(inventory.planks).toBe(1);
+  });
+
+  it("uses profession offers and exposes them in a clear trade line", () => {
+    const world = worldWithVillage();
+    const village = world.villages[0];
+    const mason = createVillager(2, village.plaza.x, village.plaza.z, village.homes[1], { x: village.plaza.x, z: village.plaza.z });
+    const inventory: Inventory = createInventory({ stone: 2, wood: 2 });
+    expect(mason.profession).toBe("mason");
+    expect(tradeSummary(mason)).toContain("stone → bricks");
+    expect(tradeWithVillager(mason, "stone", inventory).reward).toBe("bricks");
+    expect(tradeWithVillager(mason, "wood", inventory).ok).toBe(false);
   });
 
   it("rejects a trade when the player lacks the offered block", () => {

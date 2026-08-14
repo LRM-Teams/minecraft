@@ -13,13 +13,31 @@ import type { Inventory } from "./inventory";
  * village plaza. Its state machine cycles between:
  *   - `wander`      : stroll near the plaza (home-returning when it strays far)
  *   - `returnHome`  : walk back toward its home entrance/interior
+ *   - `returnWork`  : resume work at its assigned workstation after contact
  *   - `interacting` : player is within reach — they can greet or barter
  * Movement is grounded via `world.topY` (never render culling), and villager
  * AI never deletes world data.
  */
 
 /** What a villager is currently doing. */
-export type VillagerState = "wander" | "returnHome" | "interacting";
+export type VillagerState = "wander" | "returnHome" | "returnWork" | "interacting";
+export type VillagerProfession = "carpenter" | "mason" | "glazier" | "gardener";
+export type TradeOffer = { offer: BlockType; reward: BlockType };
+
+export const PROFESSION_DETAILS: Record<VillagerProfession, { label: string; workstationLabel: string; offers: readonly TradeOffer[] }> = {
+  carpenter: { label: "林作师", workstationLabel: "木作台", offers: [{ offer: "wood", reward: "planks" }] },
+  mason: { label: "砌石师", workstationLabel: "砌石台", offers: [{ offer: "stone", reward: "bricks" }] },
+  glazier: { label: "玻璃师", workstationLabel: "熔砂台", offers: [{ offer: "sand", reward: "glass" }] },
+  gardener: { label: "园艺师", workstationLabel: "育苗台", offers: [{ offer: "dirt", reward: "grass" }] },
+};
+
+const professionForHome = (home: VillageHome): VillagerProfession => {
+  const suffix = home.id.split(":").at(-1);
+  if (suffix === "northeast") return "mason";
+  if (suffix === "southwest") return "glazier";
+  if (suffix === "southeast") return "gardener";
+  return "carpenter";
+};
 
 export interface Villager {
   readonly id: number;
@@ -43,6 +61,12 @@ export interface Villager {
   wanderTimer: number;
   /** The house this villager lives in / returns to. */
   readonly home: VillageHome;
+  /** Stable profession derived from the home's deterministic workstation anchor. */
+  readonly profession: VillagerProfession;
+  /** The home workstation is a simulation anchor, never a render-only coordinate. */
+  readonly workstation: { x: number; z: number };
+  /** Maximum distance from the workstation while actively working. */
+  readonly workRange: number;
   /** Village centre (plaza) used as a wander anchor. */
   readonly plaza: { x: number; z: number };
   dead: boolean;
@@ -53,6 +77,7 @@ export interface VillagerSpec {
   speed?: number;
   interactRange?: number;
   homeRange?: number;
+  workRange?: number;
   tradeCooldown?: number;
 }
 
@@ -78,10 +103,18 @@ const VILLAGER_DROPS: readonly BlockType[] = ["dirt", "stone"];
 
 /** Human-readable greeting shown when the player walks up to a villager. */
 export const villagerGreeting = (villager: Villager): string =>
-  `${villager.home.id.split(":").slice(2).join(":")} 的村民：你好，旅行者！我可以帮你把材料加工成建筑用品。`;
+  `${PROFESSION_DETAILS[villager.profession].label}：你好，旅行者！${tradeSummary(villager)}`;
 
 /** The reward a villager will give for the offered block, or undefined. */
-export const barterReward = (offer: BlockType): BlockType | undefined => BARTER[offer];
+export const barterReward = (offer: BlockType, profession?: VillagerProfession): BlockType | undefined =>
+  profession ? PROFESSION_DETAILS[profession].offers.find((entry) => entry.offer === offer)?.reward : BARTER[offer];
+
+/** Human-readable, profession-specific trading line for HUD/dialogue surfaces. */
+export const tradeSummary = (villager: Villager): string => {
+  const detail = PROFESSION_DETAILS[villager.profession];
+  const offers = detail.offers.map((entry) => `${entry.offer} → ${entry.reward}`).join("，");
+  return `${detail.workstationLabel}交易：${offers}`;
+};
 
 /** A block a villager drops when killed. */
 export const villagerDrop = (): BlockType =>
@@ -122,10 +155,13 @@ export function createVillager(
     speed: spec.speed ?? 1.6,
     interactRange: spec.interactRange ?? 2.2,
     homeRange: spec.homeRange ?? 7,
+    workRange: spec.workRange ?? 2.2,
     tradeCooldown: spec.tradeCooldown ?? 1.5,
     tradeCooldownRemaining: 0,
     wanderTimer: 0,
     home,
+    profession: professionForHome(home),
+    workstation: { x: home.workstation.x, z: home.workstation.z },
     plaza,
     dead: false,
   };
@@ -180,8 +216,13 @@ export function updateVillagers(
       villager.state = "interacting";
     } else {
       const distEntrance = Math.hypot(villager.x - villager.home.entrance.x, villager.z - villager.home.entrance.z);
-      if (distEntrance > villager.homeRange) {
+      const distWorkstation = Math.hypot(villager.x - villager.workstation.x, villager.z - villager.workstation.z);
+      if (villager.state === "interacting") {
+        villager.state = "returnWork";
+      } else if (distEntrance > villager.homeRange) {
         villager.state = "returnHome";
+      } else if (distWorkstation > villager.workRange) {
+        villager.state = "returnWork";
       } else {
         villager.state = "wander";
       }
@@ -193,6 +234,11 @@ export function updateVillagers(
     if (villager.state === "returnHome") {
       // Walk back toward the open doorway (reachable, unlike the interior walls).
       heading = Math.atan2(villager.home.entrance.x - villager.x, villager.home.entrance.z - villager.z);
+      speed = villager.speed;
+    } else if (villager.state === "returnWork") {
+      // Workstations are inside the generated homes; approach their open side
+      // and stop on the nearest walkable cell instead of trying to pass a wall.
+      heading = Math.atan2(villager.workstation.x - villager.x, villager.workstation.z - villager.z);
       speed = villager.speed;
     } else if (villager.state === "wander") {
       // Stroll near the plaza with occasional heading changes.
@@ -271,14 +317,14 @@ export function tradeWithVillager(
   if (villager.tradeCooldownRemaining > 0) {
     return { ok: false, message: "村民正在忙，稍后再试" };
   }
-  const reward = BARTER[offer];
-  if (!reward) return { ok: false, message: "村民不感兴趣这种材料" };
+  const reward = barterReward(offer, villager.profession);
+  if (!reward) return { ok: false, message: `村民不感兴趣：${PROFESSION_DETAILS[villager.profession].label}只收 ${tradeSummary(villager).replace(/^.*：/, "")}` };
   if (inventory[offer] < 1) return { ok: false, message: `你还没有 ${offer}` };
 
   inventory[offer] -= 1;
   inventory[reward] += 1;
   villager.tradeCooldownRemaining = villager.tradeCooldown;
-  return { ok: true, message: `交换成功：${offer} → ${reward}`, reward };
+  return { ok: true, message: `交换成功：${PROFESSION_DETAILS[villager.profession].label} ${offer} → ${reward}`, reward };
 }
 
 /** True when the player is within a villager's interact range. */
