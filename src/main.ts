@@ -2,7 +2,7 @@ import * as THREE from "three";
 import "./style.css";
 import { craftPlanks, createInventory, type Inventory } from "./inventory";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
-import { BLOCK_TYPES, type BlockPosition, type BlockType, VoxelWorld } from "./world";
+import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -173,7 +173,7 @@ class BlockRenderer {
   private meshes = new Map<BlockType, THREE.InstancedMesh>();
   private positions = new Map<BlockType, BlockPosition[]>();
 
-  rebuild(world: VoxelWorld): void {
+  rebuild(world: VoxelWorld, centerX: number, centerZ: number): void {
     this.meshes.forEach((mesh) => {
       scene.remove(mesh);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -182,7 +182,7 @@ class BlockRenderer {
     this.meshes.clear();
     this.positions.clear();
     BLOCK_TYPES.forEach((type) => this.positions.set(type, []));
-    world.visibleBlocks().forEach(({ type, position }) => {
+    world.visibleBlocks(centerX, centerZ, 2).forEach(({ type, position }) => {
       this.positions.get(type)?.push(position);
     });
     BLOCK_TYPES.forEach((type) => {
@@ -209,7 +209,6 @@ class BlockRenderer {
 const saved = loadSave();
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
 const blocks = new BlockRenderer();
-blocks.rebuild(world);
 
 const selection = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012, 1.012, 1.012)),
@@ -234,6 +233,17 @@ const initialY = world.topY(0, 0) + 1.72;
 camera.position.fromArray(saved?.player.position ?? [0, initialY, 8]);
 camera.rotation.set(pitch, yaw, 0);
 seedText.textContent = `WORLD SEED · ${world.seed}`;
+let loadedChunkX = Number.NaN;
+let loadedChunkZ = Number.NaN;
+const syncRenderedChunks = (force = false): void => {
+  const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+  const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+  if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
+  blocks.rebuild(world, camera.position.x, camera.position.z);
+  loadedChunkX = chunkX;
+  loadedChunkZ = chunkZ;
+};
+syncRenderedChunks(true);
 
 const renderHotbar = (): void => {
   hotbar.innerHTML = Array.from({ length: 9 }, (_, index) => {
@@ -256,7 +266,7 @@ let target: { position: BlockPosition; normal: THREE.Vector3 } | undefined;
 
 const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory });
 const persist = (): void => { saveGame(world, playerSave()); dirty = false; };
-const refreshWorld = (): void => { blocks.rebuild(world); seedText.textContent = `WORLD SEED · ${world.seed}`; dirty = true; };
+const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textContent = `WORLD SEED · ${world.seed}`; dirty = true; };
 
 const findTarget = (): void => {
   raycaster.setFromCamera(center, camera);
@@ -376,6 +386,7 @@ const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   if (document.pointerLockElement === renderer.domElement) updatePlayer(delta);
+  syncRenderedChunks();
   const dayProgress = (now % 150000) / 150000;
   const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
   const angle = dayProgress * Math.PI * 2 - Math.PI / 2;

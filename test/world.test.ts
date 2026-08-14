@@ -35,4 +35,13 @@ describe("VoxelWorld", () => {
     world.remove({ x: 1, y: 1, z: 0 });
     expect(world.visibleBlocks().some(({ position }) => position.x === 0 && position.y === 1 && position.z === 0)).toBe(true);
   });
+
+  it("limits renderable blocks to nearby chunks without deleting distant world data", () => {
+    const world = new VoxelWorld(7, 40);
+    const distant = { x: 32, y: 18, z: 32 };
+    world.set(distant, "wood");
+    expect(world.get(distant.x, distant.y, distant.z)).toBe("wood");
+    expect(world.visibleBlocks(0, 0, 1).some(({ position }) => position.x === distant.x && position.y === distant.y && position.z === distant.z)).toBe(false);
+    expect(world.visibleBlocks(32, 32, 1).some(({ position }) => position.x === distant.x && position.y === distant.y && position.z === distant.z)).toBe(true);
+  });
 });

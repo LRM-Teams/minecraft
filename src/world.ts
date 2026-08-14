@@ -1,8 +1,9 @@
 export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
+export const CHUNK_SIZE = 16;
 
 export type BlockPosition = { x: number; y: number; z: number };
-export type WorldSnapshot = { seed: number; blocks: [string, BlockType][] };
+export type WorldSnapshot = { seed: number; size: number; blocks: [string, BlockType][] };
 const NEIGHBORS: BlockPosition[] = [
   { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
   { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
@@ -20,7 +21,7 @@ export class VoxelWorld {
   readonly size: number;
   readonly seed: number;
 
-  constructor(seed = 72831, size = 30) {
+  constructor(seed = 72831, size = 48) {
     this.seed = seed;
     this.size = size;
     this.generate();
@@ -51,11 +52,25 @@ export class VoxelWorld {
     return -1;
   }
 
-  /** Blocks fully surrounded by opaque neighbours do not contribute to the view. */
-  visibleBlocks(): { position: BlockPosition; type: BlockType }[] {
+  /** The mathematical chunk containing a world coordinate. */
+  chunkAt(value: number): number {
+    return Math.floor(value / CHUNK_SIZE);
+  }
+
+  /**
+   * Produces only exposed blocks in the requested square of chunks. This is the
+   * rendering boundary: the world remains persistent, while distant chunks cost no draw calls.
+   */
+  visibleBlocks(centerX?: number, centerZ?: number, chunkRadius?: number): { position: BlockPosition; type: BlockType }[] {
     const visible: { position: BlockPosition; type: BlockType }[] = [];
+    const centerChunkX = centerX === undefined ? undefined : this.chunkAt(centerX);
+    const centerChunkZ = centerZ === undefined ? undefined : this.chunkAt(centerZ);
     this.blocks.forEach((type, positionKey) => {
       const [x, y, z] = positionKey.split(",").map(Number);
+      if (
+        centerChunkX !== undefined && centerChunkZ !== undefined && chunkRadius !== undefined
+        && (Math.abs(this.chunkAt(x) - centerChunkX) > chunkRadius || Math.abs(this.chunkAt(z) - centerChunkZ) > chunkRadius)
+      ) return;
       const exposed = NEIGHBORS.some((offset) => {
         const neighbour = this.get(x + offset.x, y + offset.y, z + offset.z);
         return neighbour === undefined || (neighbour === "water" && type !== "water");
@@ -66,10 +81,10 @@ export class VoxelWorld {
   }
 
   snapshot(): WorldSnapshot {
-    return { seed: this.seed, blocks: [...this.blocks.entries()] };
+    return { seed: this.seed, size: this.size, blocks: [...this.blocks.entries()] };
   }
 
-  static fromSnapshot(snapshot: WorldSnapshot, size = 30): VoxelWorld {
+  static fromSnapshot(snapshot: WorldSnapshot, size = snapshot.size ?? 30): VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
     snapshot.blocks.forEach(([position, type]) => world.blocks.set(position, type));
