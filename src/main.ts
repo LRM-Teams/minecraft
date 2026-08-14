@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
-import { createMob, updateEntities, type Mob } from "./entities";
+import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
@@ -229,31 +229,54 @@ let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.f
 const blocks = new BlockRenderer();
 
 const spawnMobs = (): Mob[] => [
-  createMob(1, 5, 2, { hp: 12, speed: 2.05, aggroRange: 6.5 }),
-  createMob(2, -6, -5, { hp: 12, speed: 2.2, aggroRange: 7 }),
-  createMob(3, 8, -6, { hp: 16, speed: 1.9, aggroRange: 7.5 }),
+  createMob(1, 5, 2, { kind: "stalker" }),
+  createMob(2, -6, -5, { kind: "brute" }),
+  createMob(3, 8, -6, { kind: "wisp" }),
 ];
 let mobs = spawnMobs();
 const mobMeshes = new Map<number, THREE.Group>();
 const mobBodyGeometry = new THREE.BoxGeometry(0.78, 0.82, 0.56);
 const mobHeadGeometry = new THREE.BoxGeometry(0.68, 0.62, 0.62);
-const mobBodyMaterial = new THREE.MeshLambertMaterial({ color: 0x59645a });
-const mobHeadMaterial = new THREE.MeshLambertMaterial({ color: 0x7d8a7c });
-const mobEyeMaterial = new THREE.MeshBasicMaterial({ color: 0xf3534d });
+const mobStyles: Record<MobKind, { body: THREE.MeshLambertMaterial; head: THREE.MeshLambertMaterial; eye: THREE.MeshBasicMaterial; scale: number; bob: number }> = {
+  stalker: {
+    body: new THREE.MeshLambertMaterial({ color: 0x59645a }),
+    head: new THREE.MeshLambertMaterial({ color: 0x7d8a7c }),
+    eye: new THREE.MeshBasicMaterial({ color: 0xf3534d }),
+    scale: 1,
+    bob: 0,
+  },
+  brute: {
+    body: new THREE.MeshLambertMaterial({ color: 0x785543 }),
+    head: new THREE.MeshLambertMaterial({ color: 0xa57655 }),
+    eye: new THREE.MeshBasicMaterial({ color: 0xffbd5e }),
+    scale: 1.28,
+    bob: 0,
+  },
+  wisp: {
+    body: new THREE.MeshLambertMaterial({ color: 0x526d9f, transparent: true, opacity: 0.86 }),
+    head: new THREE.MeshLambertMaterial({ color: 0x8ba9dc, transparent: true, opacity: 0.9 }),
+    eye: new THREE.MeshBasicMaterial({ color: 0x7bfbff }),
+    scale: 0.8,
+    bob: 0.18,
+  },
+};
+const mobNames: Record<MobKind, string> = { stalker: "巡游者", brute: "巨岩怪", wisp: "夜光灵" };
 
 const createMobMesh = (mob: Mob): THREE.Group => {
   const group = new THREE.Group();
-  const body = new THREE.Mesh(mobBodyGeometry, mobBodyMaterial);
+  const style = mobStyles[mob.kind];
+  group.scale.setScalar(style.scale);
+  const body = new THREE.Mesh(mobBodyGeometry, style.body);
   body.position.y = 0.42;
   body.castShadow = true;
   body.receiveShadow = true;
-  const head = new THREE.Mesh(mobHeadGeometry, mobHeadMaterial);
+  const head = new THREE.Mesh(mobHeadGeometry, style.head);
   head.position.y = 1.05;
   head.castShadow = true;
   head.receiveShadow = true;
   group.add(body, head);
   [-0.18, 0.18].forEach((x) => {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), mobEyeMaterial);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), style.eye);
     eye.position.set(x, 1.1, 0.33);
     group.add(eye);
   });
@@ -275,7 +298,10 @@ const syncMobMeshes = (): void => {
       mesh = createMobMesh(mob);
       mobMeshes.set(mob.id, mesh);
     }
-    if (Number.isFinite(mob.y)) mesh.position.set(mob.x, mob.y, mob.z);
+    if (Number.isFinite(mob.y)) {
+      const hover = mobStyles[mob.kind].bob * (1 + Math.sin(performance.now() / 240 + mob.id)) * 0.5;
+      mesh.position.set(mob.x, mob.y + hover, mob.z);
+    }
     mesh.rotation.y = mob.facing;
   });
 };
@@ -405,7 +431,7 @@ const attackMobAtCrosshair = (): boolean => {
   if (!mob) return false;
   mob.hp = Math.max(0, mob.hp - 4);
   soundscape.play("hit");
-  status.textContent = mob.hp > 0 ? `命中敌对体 · ${mob.hp}/${mob.maxHp}` : "敌对体已击倒";
+  status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
   return true;
 };
 

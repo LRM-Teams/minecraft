@@ -9,9 +9,11 @@ import type { BlockType, VoxelWorld } from "./world";
  */
 
 export type MobState = "idle" | "chase";
+export type MobKind = "stalker" | "brute" | "wisp";
 
 export interface Mob {
   readonly id: number;
+  readonly kind: MobKind;
   x: number;
   y: number;
   z: number;
@@ -38,6 +40,7 @@ export interface Mob {
 }
 
 export interface MobSpec {
+  kind?: MobKind;
   hp?: number;
   speed?: number;
   aggroRange?: number;
@@ -56,15 +59,25 @@ export interface EntityFrameResult {
   drops: BlockType[];
 }
 
-const SPEC_DEFAULTS: Required<MobSpec> = {
-  hp: 12,
-  speed: 2.2,
-  aggroRange: 6,
-  giveUpRange: 9,
-  reach: 0.85,
-  damage: 1,
-  attackCooldown: 1.2,
+type MobStats = Required<Omit<MobSpec, "kind">>;
+
+const KIND_DEFAULTS: Record<MobKind, MobStats> = {
+  // Balanced, basic close-range enemy.
+  stalker: { hp: 12, speed: 2.2, aggroRange: 6, giveUpRange: 9, reach: 0.85, damage: 1, attackCooldown: 1.2 },
+  // Slow and tough, with a heavier contact strike.
+  brute: { hp: 22, speed: 1.45, aggroRange: 5.5, giveUpRange: 8, reach: 1.05, damage: 2, attackCooldown: 1.55 },
+  // Fragile, fast scout that notices the player farther away.
+  wisp: { hp: 8, speed: 3.05, aggroRange: 8, giveUpRange: 11, reach: 0.7, damage: 1, attackCooldown: 1.0 },
 };
+
+const DROPS: Record<MobKind, readonly BlockType[]> = {
+  stalker: ["dirt", "stone"],
+  brute: ["stone", "bricks"],
+  wisp: ["sand", "glass"],
+};
+
+/** Possible single-block rewards for the given original enemy variety. */
+export const mobDropCandidates = (kind: MobKind): readonly BlockType[] => DROPS[kind];
 
 /** Stand a mob on the ground of a world column: body occupies the cell just above the top solid block. */
 function groundY(world: VoxelWorld, x: number, z: number): number {
@@ -78,9 +91,11 @@ function bodyFree(world: VoxelWorld, nx: number, nz: number, bodyY: number): boo
 }
 
 export function createMob(id: number, x: number, z: number, spec: MobSpec = {}): Mob {
-  const s = { ...SPEC_DEFAULTS, ...spec };
+  const kind = spec.kind ?? "stalker";
+  const s = { ...KIND_DEFAULTS[kind], ...spec };
   return {
     id,
+    kind,
     x,
     y: -Infinity, // resolved to ground on first update
     z,
@@ -118,7 +133,8 @@ export function updateEntities(
     if (mob.hp <= 0) {
       mob.dead = true;
       result.deaths.push(mob);
-      result.drops.push(Math.random() < 0.5 ? "dirt" : "stone");
+      const drops = mobDropCandidates(mob.kind);
+      result.drops.push(drops[Math.floor(Math.random() * drops.length)]);
       continue;
     }
 

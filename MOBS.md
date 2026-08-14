@@ -1,8 +1,9 @@
 # Mobs / Hostile Entities — integration notes
 
 Logic module: `src/entities.ts` (pure TS, no THREE, no `visibleBlocks`).
-Tests: `test/entities.test.ts` (7 cases — grounding, no world mutation, chase,
-idle, contact damage + cooldown, death + drops, wall avoidance).
+Tests: `test/entities.test.ts` (10 cases — grounding, no world mutation, three
+enemy presets, chase, idle, contact damage + cooldown, kind-specific drops,
+death + drops, step-up and wall avoidance).
 
 Does **not** modify `BLOCK_TYPES`, `WorldSnapshot`, `world.ts`, or `inventory.ts`.
 Entity logic never deletes world data and never depends on render culling
@@ -13,10 +14,11 @@ Entity logic never deletes world data and never depends on render culling
 ```ts
 import { createMob, updateEntities } from "./entities";
 
-// spawn a hostile walker at ground level on column (x, z)
+// Spawn original hostile varieties at ground level on columns (x, z).
 const mobs: Mob[] = [
-  createMob(1, 4, 4),
-  createMob(2, -5, 3, { hp: 20, aggroRange: 8, speed: 2.6 }),
+  createMob(1, 4, 4, { kind: "stalker" }), // balanced
+  createMob(2, -5, 3, { kind: "brute" }),  // slow, tough, heavy hit
+  createMob(3, 6, -4, { kind: "wisp" }),   // quick, fragile scout
 ];
 
 // each frame, next to the existing player update:
@@ -51,4 +53,6 @@ locked). Add the mobs call in the same path:
 - Contact damage applies per `attackCooldown`, gated by `reach`.
 - Mob state: `idle` (light wander) ↔ `chase` (within `aggroRange`, gives up past
   `giveUpRange`).
+- Kinds: `stalker` drops dirt/stone, `brute` drops stone/bricks, and `wisp`
+  drops sand/glass. Their presets differ in health, speed, awareness and damage.
 - No mob persistence this pass (save contract untouched); extend later if wanted.
