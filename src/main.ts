@@ -3,6 +3,7 @@ import "./style.css";
 import { createMob, updateEntities, type Mob } from "./entities";
 import { craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
+import { Soundscape } from "./sound";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
 
@@ -15,6 +16,7 @@ app.innerHTML = `
     <div id="seed"></div>
     <div id="world-time"></div>
     <div id="health"></div>
+    <div id="audio-state"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置</div>
     <div id="status"></div>
@@ -26,7 +28,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–8 / 滚轮切换方块　C：1 原木合成 4 木板</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–8 / 滚轮切换方块　C：1 原木合成 4 木板　M：切换音效</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
@@ -284,12 +286,14 @@ const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
+const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
+const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
 const initialY = world.topY(0, 0) + 1.72;
@@ -321,6 +325,11 @@ const renderHealth = (): void => {
   healthText.textContent = `生命 ${"♥".repeat(playerHealth)}${"♡".repeat(maxPlayerHealth - playerHealth)}`;
 };
 renderHealth();
+
+const renderAudioState = (): void => {
+  audioText.textContent = `M 音效：${soundscape.isEnabled ? "开" : "关"}`;
+};
+renderAudioState();
 
 const keys = new Set<string>();
 let verticalVelocity = 0;
@@ -366,6 +375,7 @@ const attackMobAtCrosshair = (): boolean => {
   const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
   if (!mob) return false;
   mob.hp = Math.max(0, mob.hp - 4);
+  soundscape.play("hit");
   status.textContent = mob.hp > 0 ? `命中敌对体 · ${mob.hp}/${mob.maxHp}` : "敌对体已击倒";
   return true;
 };
@@ -380,7 +390,10 @@ const edit = (place: boolean): void => {
   if (!target) return;
   if (!place) {
     const removed = world.remove(target.position);
-    if (removed) inventory[removed] += 1;
+    if (removed) {
+      inventory[removed] += 1;
+      soundscape.play("break");
+    }
   } else {
     const type = BLOCK_TYPES[selected];
     if (!type || inventory[type] <= 0) return;
@@ -388,6 +401,7 @@ const edit = (place: boolean): void => {
     if (!world.get(position.x, position.y, position.z) && !intersectsPlayer(position)) {
       world.set(position, type);
       inventory[type] -= 1;
+      soundscape.play("place");
     }
   }
   refreshWorld();
@@ -423,6 +437,7 @@ const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); }
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
+  soundscape.unlock();
   if (event.button === 0 && !attackMobAtCrosshair()) mineHeld = true;
   if (event.button === 2) edit(true);
 });
@@ -444,12 +459,20 @@ document.addEventListener("keydown", (event) => {
   const number = Number(event.key);
   if (number >= 1 && number <= BLOCK_TYPES.length) { selected = number - 1; renderHotbar(); dirty = true; }
   if (event.code === "KeyC" && !event.repeat) {
+    soundscape.unlock();
     if (craftPlanks(inventory)) {
       selected = BLOCK_TYPES.indexOf("planks");
       renderHotbar();
       dirty = true;
       persist();
+      soundscape.play("craft");
     }
+  }
+  if (event.code === "KeyM" && !event.repeat) {
+    const enabled = soundscape.toggle();
+    if (enabled) soundscape.unlock();
+    renderAudioState();
+    status.textContent = enabled ? "音效已开启" : "音效已关闭";
   }
 });
 document.addEventListener("keyup", (event) => keys.delete(event.code));
@@ -492,7 +515,11 @@ const updatePlayer = (delta: number): void => {
     const nextGround = world.topY(Math.round(nextX), Math.round(nextZ)) + 1.72;
     if (nextGround <= camera.position.y + 0.85) { camera.position.x = nextX; camera.position.z = nextZ; }
   }
-  if (grounded && keys.has("Space")) { verticalVelocity = 7.2; grounded = false; }
+  if (grounded && keys.has("Space")) {
+    verticalVelocity = 7.2;
+    grounded = false;
+    soundscape.play("jump");
+  }
   verticalVelocity -= 19 * delta;
   camera.position.y += verticalVelocity * delta;
   const ground = world.topY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
@@ -507,6 +534,7 @@ const updateMobs = (delta: number): void => {
     renderHotbar();
     dirty = true;
     status.textContent = `获得 ${drops.map((drop) => labels[drop]).join("、")}`;
+    soundscape.play("pickup");
   }
   if (damageToPlayer > 0) {
     playerHealth = Math.max(0, playerHealth - damageToPlayer);
@@ -515,8 +543,10 @@ const updateMobs = (delta: number): void => {
       camera.position.set(0, world.topY(0, 0) + 1.72, 8);
       verticalVelocity = 0;
       status.textContent = "生命耗尽，已在起点重生";
+      soundscape.play("respawn");
     } else {
       status.textContent = `受到 ${damageToPlayer} 点伤害`;
+      soundscape.play("hurt");
     }
     renderHealth();
   }
