@@ -16,7 +16,7 @@ app.innerHTML = `
     <div id="world-time"></div>
     <div id="health"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘 · 右键放置</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置</div>
     <div id="status"></div>
     <div id="hotbar"></div>
   </div>
@@ -26,7 +26,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–8 / 滚轮切换方块<br/>C：1 原木合成 4 木板</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–8 / 滚轮切换方块　C：1 原木合成 4 木板</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
@@ -355,6 +355,21 @@ const findTarget = (): void => {
   selection.position.set(position.x, position.y, position.z);
 };
 
+/** A mob is hittable only when it is the first object under the crosshair. */
+const attackMobAtCrosshair = (): boolean => {
+  raycaster.setFromCamera(center, camera);
+  const mobHit = raycaster.intersectObjects([...mobMeshes.values()], true)[0];
+  if (!mobHit) return false;
+  const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
+  if (blockHit && blockHit.distance < mobHit.distance) return false;
+  const mobId = mobHit.object.userData.mobId as number | undefined;
+  const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
+  if (!mob) return false;
+  mob.hp = Math.max(0, mob.hp - 4);
+  status.textContent = mob.hp > 0 ? `命中敌对体 · ${mob.hp}/${mob.maxHp}` : "敌对体已击倒";
+  return true;
+};
+
 const intersectsPlayer = (position: BlockPosition): boolean => {
   const dx = Math.abs(camera.position.x - position.x);
   const dz = Math.abs(camera.position.z - position.z);
@@ -408,7 +423,7 @@ const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); }
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
-  if (event.button === 0) mineHeld = true;
+  if (event.button === 0 && !attackMobAtCrosshair()) mineHeld = true;
   if (event.button === 2) edit(true);
 });
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -448,10 +463,14 @@ resetButton.addEventListener("click", () => {
   clearSave();
   world = new VoxelWorld(Math.floor(Math.random() * 999999));
   inventory = createInventory();
+  clearMobMeshes();
+  mobs = spawnMobs();
+  playerHealth = maxPlayerHealth;
   camera.position.set(0, world.topY(0, 0) + 1.72, 8);
   verticalVelocity = 0;
   refreshWorld();
   renderHotbar();
+  renderHealth();
 });
 addEventListener("beforeunload", () => { if (dirty) persist(); });
 addEventListener("resize", () => {
@@ -481,10 +500,36 @@ const updatePlayer = (delta: number): void => {
   if (camera.position.y < -8) camera.position.set(0, world.topY(0, 0) + 1.72, 8);
 };
 
+const updateMobs = (delta: number): void => {
+  const { damageToPlayer, drops } = updateEntities(world, mobs, camera.position, delta);
+  if (drops.length) {
+    drops.forEach((drop) => { inventory[drop] += 1; });
+    renderHotbar();
+    dirty = true;
+    status.textContent = `获得 ${drops.map((drop) => labels[drop]).join("、")}`;
+  }
+  if (damageToPlayer > 0) {
+    playerHealth = Math.max(0, playerHealth - damageToPlayer);
+    if (playerHealth === 0) {
+      playerHealth = maxPlayerHealth;
+      camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+      verticalVelocity = 0;
+      status.textContent = "生命耗尽，已在起点重生";
+    } else {
+      status.textContent = `受到 ${damageToPlayer} 点伤害`;
+    }
+    renderHealth();
+  }
+  syncMobMeshes();
+};
+
 const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
-  if (document.pointerLockElement === renderer.domElement) updatePlayer(delta);
+  if (document.pointerLockElement === renderer.domElement) {
+    updatePlayer(delta);
+    updateMobs(delta);
+  }
   syncRenderedChunks();
   const dayProgress = (now % 150000) / 150000;
   const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
