@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import "./style.css";
+import { craftPlanks, createInventory, type Inventory } from "./inventory";
 import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
 import { BLOCK_TYPES, type BlockPosition, type BlockType, VoxelWorld } from "./world";
 
@@ -22,7 +23,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–7 / 滚轮切换方块</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键破坏　右键放置　1–8 / 滚轮切换方块<br/>C：1 原木合成 4 木板</p>
       <button id="reset" class="link">生成新世界</button>
     </div>
   </div>`;
@@ -73,14 +74,14 @@ const colors: Record<BlockType, number> = {
   dirt: 0x8c633f,
   stone: 0x7a8186,
   wood: 0x96633e,
+  planks: 0xba844d,
   leaves: 0x3f7f43,
   sand: 0xd9c27e,
   water: 0x3d8ec9,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", leaves: "树叶", sand: "沙子", water: "水",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水",
 };
-const inventory = Object.fromEntries(BLOCK_TYPES.map((type) => [type, 48])) as Record<BlockType, number>;
 const box = new THREE.BoxGeometry(1, 1, 1);
 const matrix = new THREE.Matrix4();
 
@@ -144,6 +145,7 @@ const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 let selected = saved?.player.selected ?? 0;
+let inventory: Inventory = createInventory(saved?.player.inventory);
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
 const initialY = world.topY(0, 0) + 1.72;
@@ -170,7 +172,7 @@ raycaster.far = 6;
 const center = new THREE.Vector2(0, 0);
 let target: { position: BlockPosition; normal: THREE.Vector3 } | undefined;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected });
+const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory });
 const persist = (): void => { saveGame(world, playerSave()); dirty = false; };
 const refreshWorld = (): void => { blocks.rebuild(world); seedText.textContent = `WORLD SEED · ${world.seed}`; dirty = true; };
 
@@ -235,6 +237,14 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "Space") event.preventDefault();
   const number = Number(event.key);
   if (number >= 1 && number <= BLOCK_TYPES.length) { selected = number - 1; renderHotbar(); dirty = true; }
+  if (event.code === "KeyC" && !event.repeat) {
+    if (craftPlanks(inventory)) {
+      selected = BLOCK_TYPES.indexOf("planks");
+      renderHotbar();
+      dirty = true;
+      persist();
+    }
+  }
 });
 document.addEventListener("keyup", (event) => keys.delete(event.code));
 document.addEventListener("wheel", (event) => {
@@ -246,6 +256,7 @@ resetButton.addEventListener("click", () => {
   if (!confirm("要生成一个全新的世界吗？当前本地建造会被清除。")) return;
   clearSave();
   world = new VoxelWorld(Math.floor(Math.random() * 999999));
+  inventory = createInventory();
   camera.position.set(0, world.topY(0, 0) + 1.72, 8);
   verticalVelocity = 0;
   refreshWorld();

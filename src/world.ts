@@ -1,4 +1,4 @@
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "leaves", "sand", "water"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type BlockPosition = { x: number; y: number; z: number };

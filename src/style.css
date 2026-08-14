@@ -15,7 +15,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .slot.selected { border-color: #f5f0d2; transform: translateY(-4px); box-shadow: inset 0 0 0 2px #8b8e85, 0 0 12px #fff7c9; color: white; }
 .slot small { position: absolute; bottom: 3px; right: 5px; font-size: 10px; color: white; }
 .swatch { width: 23px; height: 23px; border: 2px solid rgba(255,255,255,.26); box-shadow: inset -4px -4px rgba(0,0,0,.15); }
-.grass { background: #5f9f47; }.dirt { background:#8c633f; }.stone { background:#7a8186; }.wood { background:#96633e; }.leaves { background:#3f7f43; }.sand { background:#d9c27e; }
+.grass { background: #5f9f47; }.dirt { background:#8c633f; }.stone { background:#7a8186; }.wood { background:#96633e; }.planks { background:#ba844d; }.leaves { background:#3f7f43; }.sand { background:#d9c27e; }.water { background:#3d8ec9; }
 #start-screen { position: fixed; inset: 0; z-index: 2; display: grid; place-items: center; background: linear-gradient(rgba(34,74,100,.4), rgba(7,14,20,.65)); transition: opacity .2s; }
 #start-screen.hidden { opacity: 0; pointer-events: none; }
 .panel { width: min(460px, calc(100% - 36px)); padding: 32px; border: 2px solid #a99d76; background: rgba(18, 24, 23, .91); box-shadow: 8px 8px 0 rgba(0,0,0,.27); text-align: center; }

@@ -1,8 +1,9 @@
 import { VoxelWorld, type WorldSnapshot } from "./world";
+import type { Inventory } from "./inventory";
 
 const SAVE_KEY = "voxel-atelier-save-v1";
 
-export type PlayerSave = { position: [number, number, number]; yaw: number; pitch: number; selected: number };
+export type PlayerSave = { position: [number, number, number]; yaw: number; pitch: number; selected: number; inventory?: Partial<Inventory> };
 type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 
 export const loadSave = (): SaveFile | undefined => {
