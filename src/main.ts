@@ -4,7 +4,7 @@ import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
-import { clearSave, loadSave, saveGame, type PlayerSave } from "./storage";
+import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, VoxelWorld } from "./world";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -38,7 +38,11 @@ app.innerHTML = `
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
       <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效</p>
-      <button id="reset" class="link">生成新世界</button>
+      <section id="world-slots">
+        <div class="world-slots-head"><strong>本地世界</strong><button id="new-world" class="world-new">＋ 新建</button></div>
+        <div id="world-list"></div>
+      </section>
+      <button id="reset" class="link">重生成当前世界</button>
     </div>
   </div>`;
 
@@ -224,7 +228,9 @@ class BlockRenderer {
   objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
 }
 
-const saved = loadSave();
+const loadedSlot = loadActiveWorld();
+const saved = loadedSlot?.save;
+let activeWorldId = loadedSlot?.id;
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
 const blocks = new BlockRenderer();
 
@@ -329,6 +335,8 @@ const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
+const worldList = document.querySelector<HTMLDivElement>("#world-list")!;
+const newWorldButton = document.querySelector<HTMLButtonElement>("#new-world")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
 const maxPlayerHealth = 10;
@@ -400,7 +408,14 @@ let miningKey: string | undefined;
 let miningProgress = 0;
 
 const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory });
-const persist = (): void => { saveGame(world, playerSave()); dirty = false; };
+const persist = (): void => {
+  if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
+    dirty = false;
+    return;
+  }
+  activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
+  dirty = false;
+};
 const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textContent = `WORLD SEED · ${world.seed}`; dirty = true; };
 
 const findTarget = (): void => {
@@ -488,6 +503,98 @@ const updateMining = (delta: number): void => {
   }
 };
 
+const escapeText = (value: string): string => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+
+const renderWorldSlots = (): void => {
+  const slots = listWorldSlots();
+  worldList.innerHTML = slots.map((slot) => {
+    const active = slot.id === activeWorldId;
+    const updated = new Date(slot.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return `<div class="world-entry ${active ? "active" : ""}">
+      <button class="world-load" data-action="load" data-id="${slot.id}"><strong>${escapeText(slot.name)}</strong><small>${active ? "当前世界" : `保存于 ${updated}`}</small></button>
+      <div class="world-actions"><button data-action="rename" data-id="${slot.id}" title="重命名">改名</button>${slots.length > 1 ? `<button data-action="delete" data-id="${slot.id}" title="删除">删除</button>` : ""}</div>
+    </div>`;
+  }).join("");
+};
+
+const applyWorldSlot = (slot: WorldSlot): void => {
+  activeWorldId = slot.id;
+  world = VoxelWorld.fromSnapshot(slot.save.world);
+  inventory = createInventory(slot.save.player.inventory);
+  selected = Math.min(slot.save.player.selected, BLOCK_TYPES.length - 1);
+  yaw = slot.save.player.yaw;
+  pitch = slot.save.player.pitch;
+  camera.position.fromArray(slot.save.player.position);
+  camera.rotation.set(pitch, yaw, 0);
+  verticalVelocity = 0;
+  grounded = false;
+  target = undefined;
+  selection.visible = false;
+  stopMining();
+  clearMobMeshes();
+  mobs = spawnMobs();
+  playerHealth = maxPlayerHealth;
+  syncRenderedChunks(true);
+  seedText.textContent = `WORLD SEED · ${world.seed}`;
+  renderHotbar();
+  renderHealth();
+  renderWorldSlots();
+  dirty = false;
+  status.textContent = `已载入 ${slot.name}`;
+};
+
+const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
+  position: [0, nextWorld.topY(0, 0) + 1.72, 8],
+  yaw: 0,
+  pitch: -0.18,
+  selected: 0,
+  inventory: createInventory(),
+});
+
+const createNewWorld = (name: string): void => {
+  const nextWorld = new VoxelWorld(Math.floor(Math.random() * 999999));
+  const slot = createWorldSlot(name, nextWorld, freshPlayer(nextWorld));
+  applyWorldSlot(slot);
+};
+
+worldList.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+  if (!button) return;
+  const id = button.dataset.id;
+  if (!id) return;
+  if (button.dataset.action === "load") {
+    const slot = loadWorldSlot(id);
+    if (slot) applyWorldSlot(slot);
+    return;
+  }
+  if (button.dataset.action === "rename") {
+    const existing = listWorldSlots().find((slot) => slot.id === id);
+    const name = existing && prompt("给这个世界起个名字", existing.name);
+    if (name !== null && name !== undefined && renameWorldSlot(id, name)) renderWorldSlots();
+    return;
+  }
+  if (button.dataset.action === "delete" && confirm("删除这个本地世界？此操作无法撤销。")) {
+    const wasActive = activeWorldId === id;
+    if (!deleteWorldSlot(id)) return;
+    const next = listWorldSlots()[0];
+    if (wasActive && next) {
+      const slot = loadWorldSlot(next.id);
+      if (slot) applyWorldSlot(slot);
+    } else {
+      renderWorldSlots();
+    }
+  }
+});
+
+newWorldButton.addEventListener("click", () => {
+  const suggested = `世界 ${listWorldSlots().length + 1}`;
+  const name = prompt("新世界名称", suggested);
+  if (name !== null) createNewWorld(name);
+});
+
+if (!activeWorldId) activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
+renderWorldSlots();
+
 const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); };
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
@@ -553,17 +660,13 @@ document.addEventListener("wheel", (event) => {
 }, { passive: true });
 resetButton.addEventListener("click", () => {
   if (!confirm("要生成一个全新的世界吗？当前本地建造会被清除。")) return;
-  clearSave();
-  world = new VoxelWorld(Math.floor(Math.random() * 999999));
-  inventory = createInventory();
-  clearMobMeshes();
-  mobs = spawnMobs();
-  playerHealth = maxPlayerHealth;
-  camera.position.set(0, world.topY(0, 0) + 1.72, 8);
-  verticalVelocity = 0;
-  refreshWorld();
-  renderHotbar();
-  renderHealth();
+  const nextWorld = new VoxelWorld(Math.floor(Math.random() * 999999));
+  if (activeWorldId && saveWorldSlot(activeWorldId, nextWorld, freshPlayer(nextWorld))) {
+    const slot = loadWorldSlot(activeWorldId);
+    if (slot) applyWorldSlot(slot);
+  } else {
+    createNewWorld("世界 1");
+  }
 });
 addEventListener("beforeunload", () => { if (dirty) persist(); });
 addEventListener("resize", () => {
