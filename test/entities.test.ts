@@ -90,6 +90,18 @@ describe("Mob combat", () => {
 });
 
 describe("Mob wall avoidance", () => {
+  it("can walk onto a one-block step", () => {
+    const world = flatWorld();
+    // The surface is y=4. Raise the next column by one block.
+    world.set({ x: 1, y: 5, z: 0 }, "stone");
+    const mob = createMob(1, 2, 0, { aggroRange: 6, giveUpRange: 9, speed: 2 });
+
+    updateEntities(world, [mob], player, 0.5);
+
+    expect(mob.x).toBeCloseTo(1);
+    expect(mob.y).toBe(6); // body cell directly above the raised ground
+  });
+
   it("does not pass through a solid wall at the body's height", () => {
     const world = flatWorld();
     // Build a thick wall column on the player's column so the mob can't cross it.

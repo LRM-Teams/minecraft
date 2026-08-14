@@ -161,8 +161,9 @@ export function updateEntities(
       const nGround = groundY(world, nx, nz);
       const nBodyY = nGround + 1;
       const stepUp = nBodyY - bodyY;
-      if (stepUp <= 1 && bodyFree(world, nx, nz, bodyY) && !isOutOfBounds(world, nx, nz)) {
+      if (stepUp <= 1 && bodyFree(world, nx, nz, nBodyY) && !isOutOfBounds(world, nx, nz)) {
         mob.x = nx;
+        mob.y = nBodyY;
         mob.z = nz;
         mob.facing = heading;
       } else {
@@ -171,8 +172,10 @@ export function updateEntities(
         const sx = mob.x + Math.sin(perp) * speed * delta;
         const sz = mob.z + Math.cos(perp) * speed * delta;
         const sGround = groundY(world, sx, sz);
-        if (sGround + 1 - bodyY <= 1 && bodyFree(world, sx, sz, bodyY) && !isOutOfBounds(world, sx, sz)) {
+        const sBodyY = sGround + 1;
+        if (sBodyY - bodyY <= 1 && bodyFree(world, sx, sz, sBodyY) && !isOutOfBounds(world, sx, sz)) {
           mob.x = sx;
+          mob.y = sBodyY;
           mob.z = sz;
           mob.facing = perp;
         }
