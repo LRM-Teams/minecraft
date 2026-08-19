@@ -73,4 +73,39 @@ describe("biomes", () => {
     // Forest threshold is low, so trees should appear for this seed somewhere.
     expect(tree).toBeGreaterThanOrEqual(0);
   });
+
+  it("exposes the new Phase-3 biomes (pale_garden, sakura) across seeds", () => {
+    let pale = false;
+    let sakura = false;
+    for (let seed = 200; seed <= 600; seed += 7) {
+      const found = biomesForSeed(seed);
+      if (found.has("pale_garden")) pale = true;
+      if (found.has("sakura")) sakura = true;
+      if (pale && sakura) break;
+    }
+    expect(BIOMES).toContain("pale_garden");
+    expect(BIOMES).toContain("sakura");
+    expect(pale).toBe(true);
+    expect(sakura).toBe(true);
+  });
+
+  it("assigns a distinct variant and deterministic flora to the new biomes", () => {
+    // Every pale_garden column is pale-tinted and every sakura column is sakura-tinted.
+    const seed = 400;
+    for (let x = -40; x <= 40; x += 3) {
+      for (let z = -40; z <= 40; z += 3) {
+        const profile = biomeAt(x, z, seed);
+        if (profile.id === "pale_garden") expect(profile.variant).toBe("pale");
+        if (profile.id === "sakura") expect(profile.variant).toBe("sakura");
+      }
+    }
+  });
+
+  it("keeps the new biome grid fully deterministic per seed", () => {
+    const seed = 56789;
+    for (const x of [-12, 3, 27, -50]) for (const z of [-9, 6, 41, -33]) {
+      expect(biomeIdAt(x, z, seed)).toBe(biomeIdAt(x, z, seed));
+      expect(biomeAt(x, z, seed).variant).toBe(biomeAt(x, z, seed).variant);
+    }
+  });
 });

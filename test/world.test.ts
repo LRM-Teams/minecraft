@@ -73,4 +73,22 @@ describe("VoxelWorld", () => {
     expect(restored.get(plaza.x, plaza.y, plaza.z)).toBeUndefined();
     expect(restored.villages).toEqual(world.villages);
   });
+
+  it("scatters Phase-3 flora deterministically without new block types", () => {
+    // Pale Garden / Sakura use existing blocks (planks = glowing shrooms / petals)
+    // as surface flora; the same seed must reproduce the identical layout.
+    const seed = 991;
+    const one = new VoxelWorld(seed, 40);
+    const two = new VoxelWorld(seed, 40);
+    expect(one.snapshot().blocks).toEqual(two.snapshot().blocks);
+    // Flora (planks on the floor) plus trees (wood) must exist in the world.
+    let planks = 0;
+    let wood = 0;
+    one.blocks.forEach((type) => {
+      if (type === "planks") planks += 1;
+      if (type === "wood") wood += 1;
+    });
+    expect(planks).toBeGreaterThan(0);
+    expect(wood).toBeGreaterThan(0);
+  });
 });

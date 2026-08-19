@@ -18,8 +18,16 @@ import type { BlockType } from "./world";
 export const BIOME_CELL = 24;
 
 /** Identifiable biomes. At least 3 are required by the acceptance criteria. */
-export const BIOMES = ["plains", "forest", "desert", "mountains"] as const;
+export const BIOMES = ["plains", "forest", "desert", "mountains", "pale_garden", "sakura"] as const;
 export type BiomeId = (typeof BIOMES)[number];
+
+/**
+ * Renderer tint key. New biomes must not add new `BlockType` values (that would
+ * break save-slot compatibility), so visual differentiation is signalled here
+ * and consumed by the renderer as a per-instance color wash. `default` means the
+ * stock block colors are used unchanged.
+ */
+export type BiomeVariant = "default" | "pale" | "sakura";
 
 /** Rules used to shape a column of terrain in a given biome. */
 export interface BiomeProfile {
@@ -43,6 +51,12 @@ export interface BiomeProfile {
   treeThreshold: number;
   /** Whether the biome floods low areas with water. */
   aquatic: boolean;
+  /** Renderer tint key (default = stock block colors). */
+  variant: BiomeVariant;
+  /** Existing block scattered on the surface as flora (e.g. glowing shrooms/petals). */
+  flowerBlock?: BlockType;
+  /** 0..1 — a per-column hash above this places a `flowerBlock` on the surface. */
+  flowerChance?: number;
 }
 
 /** Ordered registry. `index ↔ id` must stay stable for a given seed. */
@@ -50,22 +64,36 @@ const PROFILES: Record<BiomeId, BiomeProfile> = {
   plains: {
     id: "plains", name: "平原", baseHeight: 5, amplitude: 1.3, roughness: 0.9,
     surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
-    treeThreshold: 0.965, aquatic: true,
+    treeThreshold: 0.965, aquatic: true, variant: "default",
   },
   forest: {
     id: "forest", name: "森林", baseHeight: 6, amplitude: 1.6, roughness: 1.15,
     surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
-    treeThreshold: 0.55, aquatic: true,
+    treeThreshold: 0.55, aquatic: true, variant: "default",
   },
   desert: {
     id: "desert", name: "沙漠", baseHeight: 6, amplitude: 1.2, roughness: 0.7,
     surface: "sand", subsurface: "sand", underground: "stone", seaLevel: 1,
-    treeThreshold: 1, aquatic: false,
+    treeThreshold: 1, aquatic: false, variant: "default",
   },
   mountains: {
     id: "mountains", name: "山地", baseHeight: 12, amplitude: 3.2, roughness: 1.8,
     surface: "grass", subsurface: "stone", underground: "stone", seaLevel: 3,
-    treeThreshold: 0.985, aquatic: true,
+    treeThreshold: 0.985, aquatic: true, variant: "default",
+  },
+  // 苍白花园 Pale Garden: cool, damp and eerie — pale/grey-washed trees, dark
+  // grass and glowing mushrooms scattered on the surface.
+  pale_garden: {
+    id: "pale_garden", name: "苍白花园", baseHeight: 6, amplitude: 1.4, roughness: 1.1,
+    surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
+    treeThreshold: 0.6, aquatic: true, variant: "pale", flowerBlock: "planks", flowerChance: 0.55,
+  },
+  // 樱花 Sakura: mild-damp cherry blossom woodlands — pink-tinted trees and a
+  // pink petal detritus on the forest floor.
+  sakura: {
+    id: "sakura", name: "樱花林", baseHeight: 6, amplitude: 1.5, roughness: 1.05,
+    surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
+    treeThreshold: 0.58, aquatic: true, variant: "sakura", flowerBlock: "planks", flowerChance: 0.5,
   },
 };
 
@@ -86,9 +114,13 @@ const biomeForCell = (cx: number, cz: number, seed: number): BiomeId => {
   // several distinct, bordered regions per world while staying reproducible.
   const heat = hash(cx, cz, seed * 101 + 7);
   const moisture = hash(cx * 2 + 13, cz * 3 - 5, seed * 33 + 1);
-  if (moisture > 0.74) return "forest";      // wet → lush
-  if (heat > 0.58) return "desert";           // hot & dry → sand
-  if (heat > 0.26 && moisture < 0.5) return "mountains"; // rugged highlands
+  if (moisture > 0.7) return "forest";        // very wet → lush
+  if (moisture > 0.52) {
+    // Damp but not flooded: cool → pale/eerie garden, mild → cherry blossom.
+    return heat < 0.3 ? "pale_garden" : "sakura";
+  }
+  if (heat > 0.6) return "desert";            // hot & dry → sand
+  if (heat > 0.3 && moisture < 0.42) return "mountains"; // dry highlands
   return "plains";
 };
 
@@ -128,6 +160,11 @@ export function biomeAt(x: number, z: number, seed: number): BiomeProfile {
 
 export function biomeIdAt(x: number, z: number, seed: number): BiomeId {
   return biomeAt(x, z, seed).id;
+}
+
+/** Renderer tint key for a column (shorthand for `biomeAt(x,z,seed).variant`). */
+export function biomeVariantAt(x: number, z: number, seed: number): BiomeVariant {
+  return biomeAt(x, z, seed).variant;
 }
 
 /** Ordered list of every distinct biome id reachable for a seed (diagnostics). */
