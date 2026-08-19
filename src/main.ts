@@ -246,6 +246,12 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
 };
 
 const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
+  // Per-instance colors are only ever written for tintable blocks (grass/leaves/
+  // wood/planks) so they can carry a biome wash. Enabling vertexColors on a
+  // non-tintable InstancedMesh that never writes instanceColor reads an unbound
+  // attribute on some GPUs (ANGLE/ATI/strict GL) and renders every block black —
+  // the same trap the nether material hits. So only tintable types opt in.
+  const tintable = BIOME_TINTABLE.has(type);
   const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
     color: 0xffffff,
     map: blockTexture(type, face),
@@ -253,7 +259,7 @@ const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
     opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
     depthWrite: type !== "water" && type !== "glass",
-    vertexColors: true,
+    vertexColors: tintable,
   });
   if (type !== "grass") return material();
   const side = material("side");
@@ -261,6 +267,8 @@ const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
 };
 const box = new THREE.BoxGeometry(1, 1, 1);
 const matrix = new THREE.Matrix4();
+/** Neutral instance colour (white) — used as the "no wash" tint so tintable meshes always have a valid instanceColor buffer. */
+const ONE_WHITE = new THREE.Color(0xffffff);
 
 class BlockRenderer {
   private meshes = new Map<BlockType, THREE.InstancedMesh>();
@@ -291,12 +299,16 @@ class BlockRenderer {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
         if (tintable) {
+          // Always write an instance color (default → white, i.e. no wash) so the
+          // vertexColors:true material never reads an unbound instanceColor buffer,
+          // which renders black on some GPUs.
           const variant = biomeAt(position.x, position.z, world.seed).variant;
-          if (variant !== "default") {
-            let color = tintCache.get(variant);
-            if (!color) { color = BIOME_TINTS[variant].clone(); tintCache.set(variant, color); }
-            mesh.setColorAt(index, color);
+          let color = tintCache.get(variant);
+          if (!color) {
+            color = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant].clone();
+            tintCache.set(variant, color);
           }
+          mesh.setColorAt(index, color);
         }
       });
       mesh.instanceMatrix.needsUpdate = true;
