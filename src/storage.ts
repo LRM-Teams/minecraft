@@ -1,10 +1,23 @@
 import { VoxelWorld, type WorldSnapshot } from "./world";
+import type { NetherSnapshot } from "./nether";
 import type { Inventory } from "./inventory";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
 
-export type PlayerSave = { position: [number, number, number]; yaw: number; pitch: number; selected: number; inventory?: Partial<Inventory> };
+/**
+ * Optional nether state rides along on the overworld player save. All fields
+ * here are optional and additive so existing saves keep loading unchanged.
+ */
+export type PlayerSave = {
+  position: [number, number, number];
+  yaw: number;
+  pitch: number;
+  selected: number;
+  inventory?: Partial<Inventory>;
+  dimension?: "overworld" | "nether";
+  nether?: NetherSnapshot;
+};
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
 export type WorldSlotSummary = Pick<WorldSlot, "id" | "name" | "updatedAt">;

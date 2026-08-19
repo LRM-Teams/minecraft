@@ -11,6 +11,18 @@ import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, load
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
+import {
+  createPortalLink,
+  defaultPortalGeometry,
+  isWithinPortalOpening,
+  NETHER_BLOCKS,
+  NetherWorld,
+  portalTiles,
+  teleportPosition,
+  type NetherBlockId,
+  type PortalLink,
+  type PortalSide,
+} from "./nether";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -27,8 +39,9 @@ app.innerHTML = `
     <div id="guardian-state"></div>
     <div id="raid-state"></div>
     <div id="biome-state"></div>
+    <div id="dimension-state"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴 · P 村庄坐标</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <aside id="codex" class="hidden">
@@ -47,7 +60,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -132,6 +145,18 @@ const colors: Record<BlockType, number> = {
 };
 const labels: Record<BlockType, string> = {
   grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃",
+};
+
+/** Original hell palette for the nether dimension's module-internal blocks. */
+const netherColors: Record<NetherBlockId, number> = {
+  netherrack: 0x6e1d21,
+  obsidian: 0x2b2333,
+  lava: 0xff5a1f,
+  glowstone: 0xffd98a,
+  nether_portal: 0x9b2bd8,
+};
+const netherLabels: Record<NetherBlockId, string> = {
+  netherrack: "地狱岩", obsidian: "黑曜石", lava: "熔岩", glowstone: "萤石", nether_portal: "传送门",
 };
 
 /** Block types whose per-instance colors may be recoloured by biome variant. */
@@ -265,6 +290,113 @@ class BlockRenderer {
   }
 
   objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
+
+  show(): void { this.meshes.forEach((mesh) => { mesh.visible = true; }); }
+
+  hide(): void { this.meshes.forEach((mesh) => { mesh.visible = false; }); }
+}
+
+/** A per-material texture helper for the module-internal nether blocks. */
+const netherMaterial = (type: NetherBlockId): THREE.MeshLambertMaterial => new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  map: blockTextureNether(type),
+  transparent: type === "lava",
+  opacity: type === "lava" ? 0.9 : 1,
+  vertexColors: true,
+});
+
+/** Build a 16px runtime texture for a nether-only block (no overworld shared cache). */
+const netherTextureCache = new Map<string, THREE.CanvasTexture>();
+const blockTextureNether = (type: NetherBlockId): THREE.CanvasTexture => {
+  const cached = netherTextureCache.get(type);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas texture context is unavailable");
+  const base = new THREE.Color(netherColors[type]);
+  const paint = (color: THREE.Color, x = 0, y = 0, width = 16, height = 16): void => {
+    context.fillStyle = colorHex(color);
+    context.fillRect(x, y, width, height);
+  };
+  const noise = (x: number, y: number): number => {
+    const seed = type.split("").reduce((total, c) => total + c.charCodeAt(0), 0);
+    return Math.abs(Math.sin((x + 1) * 12.91 + (y + 1) * 78.23 + seed * 0.37)) % 1;
+  };
+  if (type === "lava") {
+    paint(new THREE.Color(0xff3d1a));
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.35) paint(base.clone().multiplyScalar(0.8 + noise(x + 3, y) * 0.5), x, y, 2, 2);
+    }
+  } else if (type === "nether_portal") {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if ((x + y) % 4 === 0 || noise(x, y) > 0.72) paint(base.clone().multiplyScalar(1.5), x, y, 2, 2);
+    }
+  } else if (type === "glowstone") {
+    paint(base);
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x += 4) {
+      paint(new THREE.Color(0xffffff), x + 2, y + 2, 2, 2);
+      if (noise(x, y) > 0.5) paint(base.clone().multiplyScalar(1.2), x, y, 4, 4);
+    }
+  } else {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.66 + noise(x + 4, y) * 0.5), x, y, 2, 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  netherTextureCache.set(type, texture);
+  return texture;
+};
+
+const netherMaterialFor = (type: NetherBlockId): THREE.Material => netherMaterial(type);
+
+/**
+ * Renders a set of module-internal nether blocks (the nether sub-world terrain,
+ * or an overworld portal overlay). Independent of `BlockRenderer` since these
+ * blocks are not part of `BLOCK_TYPES`.
+ */
+class NetherRenderer {
+  private meshes = new Map<NetherBlockId, THREE.InstancedMesh>();
+  private positions = new Map<NetherBlockId, BlockPosition[]>();
+
+  rebuild(entries: { position: BlockPosition; type: NetherBlockId }[]): void {
+    this.meshes.forEach((mesh) => {
+      scene.remove(mesh);
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => material.dispose());
+    });
+    this.meshes.clear();
+    this.positions.clear();
+    NETHER_BLOCKS.forEach((type) => this.positions.set(type, []));
+    entries.forEach(({ position, type }) => this.positions.get(type)?.push(position));
+    NETHER_BLOCKS.forEach((type) => {
+      const positions = this.positions.get(type) ?? [];
+      if (!positions.length) return;
+      const mesh = new THREE.InstancedMesh(box, netherMaterialFor(type), positions.length);
+      mesh.castShadow = type !== "nether_portal" && type !== "lava";
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      positions.forEach((position, index) => {
+        matrix.makeTranslation(position.x, position.y, position.z);
+        mesh.setMatrixAt(index, matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.positions = positions;
+      mesh.userData.nether = true;
+      this.meshes.set(type, mesh);
+      scene.add(mesh);
+    });
+  }
+
+  show(): void { this.meshes.forEach((mesh) => { mesh.visible = true; }); }
+  hide(): void { this.meshes.forEach((mesh) => { mesh.visible = false; }); }
+  objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
 }
 
 const loadedSlot = loadActiveWorld();
@@ -272,6 +404,44 @@ const saved = loadedSlot?.save;
 let activeWorldId = loadedSlot?.id;
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
 const blocks = new BlockRenderer();
+
+// --- Phase-3 nether dimension state ---
+let nether = saved?.player.nether ? NetherWorld.fromSnapshot(saved.player.nether) : new NetherWorld(world.seed);
+/** Which dimension the camera currently inhabits. */
+let dimension: "overworld" | "nether" = saved?.player.dimension ?? "overworld";
+/** Overworld portal anchor (along with a linked nether anchor). */
+let portalLinks: PortalLink[] = [];
+const netherChunks = new NetherRenderer(); // nether sub-world terrain
+const overworldPortal = new NetherRenderer(); // overworld portal frame overlay
+
+const currentTopY = (x: number, z: number): number => dimension === "nether" ? nether.topY(x, z) : world.topY(x, z);
+const currentSize = (): number => dimension === "nether" ? nether.size : world.size;
+const respawnPoint = (): [number, number, number] => [0, currentTopY(0, 0) + 1.72, dimension === "nether" ? 4 : 8];
+
+const applyDimensionEnvironment = (): void => {
+  const inNether = dimension === "nether";
+  scene.background = inNether ? new THREE.Color("#3a0f16") : skyColor;
+  fog.color.copy(inNether ? new THREE.Color("#2b070c") : skyColor);
+  sun.intensity = inNether ? 0.6 : 0.15 + ((performance.now() % 150000) / 150000) * 2.65;
+  daylight.color.set(inNether ? "#c96a5a" : "#d8efff");
+  daylight.intensity = inNether ? 1.5 : 2.2;
+  cloudGroup.visible = !inNether;
+};
+
+const syncDimensionState = (): void => {
+  const dimensionText = document.querySelector<HTMLDivElement>("#dimension-state")!;
+  dimensionText.textContent = dimension === "nether" ? "下界 · NETHER" : "主世界 · OVERWORLD";
+  if (dimension === "nether") {
+    blocks.hide();
+    overworldPortal.hide();
+    netherChunks.show();
+  } else {
+    blocks.show();
+    overworldPortal.show();
+    netherChunks.hide();
+  }
+  applyDimensionEnvironment();
+};
 
 const spawnMobs = (): Mob[] => [
   createMob(1, 5, 2, { kind: "stalker" }),
@@ -561,15 +731,54 @@ renderGuardianState();
 renderBiomeState();
 let loadedChunkX = Number.NaN;
 let loadedChunkZ = Number.NaN;
+/** Nether blocks within the visible chunk radius around the camera. */
+const netherEntriesNear = (): { position: BlockPosition; type: NetherBlockId }[] => {
+  const entries: { position: BlockPosition; type: NetherBlockId }[] = [];
+  const cx = Math.floor(camera.position.x / CHUNK_SIZE);
+  const cz = Math.floor(camera.position.z / CHUNK_SIZE);
+  nether.blocks.forEach((type, positionKey) => {
+    const [x, y, z] = positionKey.split(",").map(Number);
+    if (Math.abs(Math.floor(x / CHUNK_SIZE) - cx) > 2 || Math.abs(Math.floor(z / CHUNK_SIZE) - cz) > 2) return;
+    entries.push({ position: { x, y, z }, type });
+  });
+  return entries;
+};
+/** Portal tiles (obsidian frame + glowing opening) for the overworld portal overlay. */
+const portalEntriesNear = (): { position: BlockPosition; type: NetherBlockId }[] => {
+  const entries: { position: BlockPosition; type: NetherBlockId }[] = [];
+  portalLinks.forEach((link) => {
+    const geometry = link.geometry;
+    const bx = link.overworld.x;
+    const by = link.overworld.y;
+    const bz = link.overworld.z;
+    // Obsidian frame: two sides + top + bottom around the opening.
+    for (let y = by - 1; y <= by + geometry.height; y += 1) {
+      entries.push({ position: { x: bx - 1, y, z: bz }, type: "obsidian" });
+      entries.push({ position: { x: bx + geometry.width, y, z: bz }, type: "obsidian" });
+    }
+    for (let x = bx - 1; x <= bx + geometry.width; x += 1) {
+      entries.push({ position: { x, y: by - 1, z: bz }, type: "obsidian" });
+      entries.push({ position: { x, y: by + geometry.height, z: bz }, type: "obsidian" });
+    }
+    portalTiles(link, "overworld").forEach((tile) => entries.push({ position: tile, type: "nether_portal" }));
+  });
+  return entries;
+};
 const syncRenderedChunks = (force = false): void => {
   const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
   if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
-  blocks.rebuild(world, camera.position.x, camera.position.z);
+  if (dimension === "nether") {
+    netherChunks.rebuild(netherEntriesNear());
+  } else {
+    blocks.rebuild(world, camera.position.x, camera.position.z);
+    overworldPortal.rebuild(portalEntriesNear());
+  }
   loadedChunkX = chunkX;
   loadedChunkZ = chunkZ;
 };
 syncRenderedChunks(true);
+syncDimensionState();
 
 const renderHotbar = (): void => {
   hotbar.innerHTML = BLOCK_TYPES.map((type, index) => {
@@ -658,6 +867,11 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   spawnGuardians();
   raids = [];
   raidCooldown = 0;
+  // Joining a room always lands in the overworld; the nether derives from the synced seed.
+  nether = new NetherWorld(world.seed);
+  portalLinks = [];
+  dimension = "overworld";
+  syncDimensionState();
   renderRaidState();
   syncRenderedChunks(true);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -672,7 +886,7 @@ let mineHeld = false;
 let miningKey: string | undefined;
 let miningProgress = 0;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory });
+const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot() });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
     dirty = false;
@@ -831,9 +1045,14 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   spawnGuardians();
   raids = [];
   raidCooldown = 0;
+  // Restore the per-world nether sub-world + dimension if the slot carries one.
+  nether = slot.save.player.nether ? NetherWorld.fromSnapshot(slot.save.player.nether) : new NetherWorld(world.seed);
+  portalLinks = [];
+  dimension = slot.save.player.dimension ?? "overworld";
   renderRaidState();
   playerHealth = maxPlayerHealth;
   syncRenderedChunks(true);
+  syncDimensionState();
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
   renderHotbar();
@@ -849,6 +1068,8 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   pitch: -0.18,
   selected: 0,
   inventory: createInventory(),
+  dimension: "overworld",
+  nether: new NetherWorld(nextWorld.seed).snapshot(),
 });
 
 const createNewWorld = (name: string): void => {
@@ -1002,6 +1223,10 @@ document.addEventListener("keydown", (event) => {
     soundscape.unlock();
     interactVillager();
   }
+  if (event.code === "KeyN" && !event.repeat) {
+    soundscape.unlock();
+    placePortal();
+  }
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
     if (enabled) soundscape.unlock();
@@ -1037,13 +1262,14 @@ const updatePlayer = (delta: number): void => {
   const inputX = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
   const inputZ = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
   const speed = keys.has("ShiftLeft") ? 8 : 4.4;
+  const size = currentSize();
   if (inputX || inputZ) {
     const length = Math.hypot(inputX, inputZ);
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
     const sideX = Math.cos(yaw), sideZ = -Math.sin(yaw);
-    const nextX = THREE.MathUtils.clamp(camera.position.x + (forwardX * inputZ + sideX * inputX) / length * speed * delta, -world.size + 1, world.size - 1);
-    const nextZ = THREE.MathUtils.clamp(camera.position.z + (forwardZ * inputZ + sideZ * inputX) / length * speed * delta, -world.size + 1, world.size - 1);
-    const nextGround = world.topY(Math.round(nextX), Math.round(nextZ)) + 1.72;
+    const nextX = THREE.MathUtils.clamp(camera.position.x + (forwardX * inputZ + sideX * inputX) / length * speed * delta, -size + 1, size - 1);
+    const nextZ = THREE.MathUtils.clamp(camera.position.z + (forwardZ * inputZ + sideZ * inputX) / length * speed * delta, -size + 1, size - 1);
+    const nextGround = currentTopY(Math.round(nextX), Math.round(nextZ)) + 1.72;
     if (nextGround <= camera.position.y + 0.85) { camera.position.x = nextX; camera.position.z = nextZ; }
   }
   if (grounded && keys.has("Space")) {
@@ -1053,9 +1279,9 @@ const updatePlayer = (delta: number): void => {
   }
   verticalVelocity -= 19 * delta;
   camera.position.y += verticalVelocity * delta;
-  const ground = world.topY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
+  const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
   if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
-  if (camera.position.y < -8) camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+  if (camera.position.y < -8) camera.position.set(...respawnPoint());
 };
 
 const updateMobs = (delta: number): void => {
@@ -1154,16 +1380,109 @@ const updateRaidsLoop = (delta: number): void => {
   renderRaidState();
 };
 
+const renderNetherState = (): void => {
+  biomeText.textContent = "下界生态 · 地狱岩 / 熔岩 / 萤石";
+};
+
+/**
+ * Nether-only ecology each frame: lava submersion burns the player and a
+ * stepped-into portal returns you to the overworld.
+ */
+let lavaTimer = 0;
+const updateNetherEcology = (delta: number): void => {
+  const px = Math.round(camera.position.x);
+  const py = Math.round(camera.position.y);
+  const pz = Math.round(camera.position.z);
+  const inLava = nether.get(px, py, pz) === "lava" || nether.get(px, py - 1, pz) === "lava";
+  if (inLava) {
+    lavaTimer += delta;
+    if (lavaTimer >= 0.4) {
+      lavaTimer = 0;
+      playerHealth = Math.max(0, playerHealth - 1);
+      if (playerHealth <= 0) {
+        playerHealth = maxPlayerHealth;
+        camera.position.set(...respawnPoint());
+        verticalVelocity = 0;
+        status.textContent = "熔岩灼烧，已于下界重生";
+        soundscape.play("respawn");
+      } else {
+        status.textContent = "熔岩灼烧！";
+        soundscape.play("hurt");
+      }
+      renderHealth();
+    }
+  } else {
+    lavaTimer = 0;
+  }
+};
+
+/** A portal frame + opening built in the overworld, linked to the nether. */
+const placePortal = (): void => {
+  if (dimension !== "overworld") { status.textContent = "下界中无法再搭建传送门"; return; }
+  if (portalLinks.length >= 3) { status.textContent = "主世界传送门已达上限（3）"; return; }
+  const geometry = defaultPortalGeometry();
+  const anchorX = Math.round(camera.position.x - Math.sin(yaw) * 1.8);
+  const anchorZ = Math.round(camera.position.z - Math.cos(yaw) * 1.8);
+  const baseY = world.topY(anchorX, anchorZ) + 1;
+  const overworldAnchor = { x: anchorX, y: baseY, z: anchorZ };
+  const offset = (portalLinks.length + 1) * 7;
+  const nAnchorX = 4 + (portalLinks.length % 2 === 0 ? offset : -offset);
+  const nAnchorZ = 4 + offset;
+  const nAnchorY = nether.topY(nAnchorX, nAnchorZ) + 1;
+  const netherAnchor = { x: nAnchorX, y: nAnchorY, z: nAnchorZ };
+  portalLinks.push(createPortalLink(overworldAnchor, netherAnchor, geometry));
+  syncRenderedChunks(true);
+  dirty = true;
+  persist();
+  status.textContent = "传送门已点燃：下界已开启 · 踏入紫色光门穿梭维度";
+  soundscape.play("place");
+};
+
+/** When the player stands inside the active dimension's portal opening, cross over. */
+const tryEnterPortal = (): boolean => {
+  for (const link of portalLinks) {
+    const from: PortalSide = dimension;
+    const anchor = from === "overworld" ? link.overworld : link.nether;
+    if (!isWithinPortalOpening(anchor, link.geometry, Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z))) continue;
+    const dest = teleportPosition(link, from, camera.position);
+    dimension = from === "overworld" ? "nether" : "overworld";
+    const groundY = currentTopY(dest.x, dest.z) + 1.72;
+    camera.position.set(dest.x, Math.max(groundY, dest.y + 0.5), dest.z);
+    verticalVelocity = 0;
+    groundPlayerIfBuried();
+    syncRenderedChunks(true);
+    syncDimensionState();
+    dirty = true;
+    persist();
+    status.textContent = dimension === "nether" ? "已进入下界 · 危险地带，小心熔岩" : "已回到主世界";
+    soundscape.play("place");
+    return true;
+  }
+  return false;
+};
+
+/** After teleporting, always stand on (not inside) the active dimension's ground. */
+const groundPlayerIfBuried = (): void => {
+  const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
+  if (camera.position.y < ground) camera.position.y = ground;
+};
+
 const frame = (now: number): void => {
   const delta = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
-    updateMobs(delta);
-    updateGuardiansLoop(delta);
-    updateVillagersLoop(delta);
-    updateRaidsLoop(delta);
-    renderBiomeState();
+    if (dimension === "overworld") {
+      tryEnterPortal();
+      updateMobs(delta);
+      updateGuardiansLoop(delta);
+      updateVillagersLoop(delta);
+      updateRaidsLoop(delta);
+      renderBiomeState();
+    } else {
+      updateNetherEcology(delta);
+      renderNetherState();
+    }
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
       room.announcePlayer();
@@ -1171,22 +1490,24 @@ const frame = (now: number): void => {
     }
   }
   syncRenderedChunks();
-  const dayProgress = (now % 150000) / 150000;
-  const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
-  const angle = dayProgress * Math.PI * 2 - Math.PI / 2;
-  sun.position.set(Math.cos(angle) * 38, Math.sin(angle) * 34 + 5, 18);
-  sun.intensity = 0.15 + sunHeight * 2.65;
-  daylight.intensity = 0.25 + sunHeight * 1.95;
-  const night = 1 - sunHeight;
-  moon.position.set(-sun.position.x, -sun.position.y + 12, -sun.position.z);
-  moonMaterial.opacity = Math.max(0, (night - 0.25) / 0.75);
-  starMaterial.opacity = Math.max(0, (night - 0.32) / 0.68) * 0.92;
-  cloudMaterial.opacity = 0.22 + sunHeight * 0.58;
-  skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
-  scene.background = skyColor;
-  fog.color.copy(skyColor);
-  cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
-  timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
+  if (dimension === "overworld") {
+    const dayProgress = (now % 150000) / 150000;
+    const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
+    const angle = dayProgress * Math.PI * 2 - Math.PI / 2;
+    sun.position.set(Math.cos(angle) * 38, Math.sin(angle) * 34 + 5, 18);
+    sun.intensity = 0.15 + sunHeight * 2.65;
+    daylight.intensity = 0.25 + sunHeight * 1.95;
+    const night = 1 - sunHeight;
+    moon.position.set(-sun.position.x, -sun.position.y + 12, -sun.position.z);
+    moonMaterial.opacity = Math.max(0, (night - 0.25) / 0.75);
+    starMaterial.opacity = Math.max(0, (night - 0.32) / 0.68) * 0.92;
+    cloudMaterial.opacity = 0.22 + sunHeight * 0.58;
+    skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
+    scene.background = skyColor;
+    fog.color.copy(skyColor);
+    cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
+    timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
+  }
   findTarget();
   updateMining(delta);
   renderer.render(scene, camera);
