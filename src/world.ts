@@ -1,6 +1,6 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export const CHUNK_SIZE = 16;
 
@@ -156,6 +156,76 @@ export class VoxelWorld {
       }
     }
     this.generateVillage();
+    this.carveCaves();
+    this.scatterOres();
+  }
+
+  /**
+   * Carve deterministic underground cavities and connecting tunnels out of the
+   * buried stone. Uses a seed-stable 3D-style noise and only touches blocks deep
+   * below the surface, so the above-ground terrain, biomes and villages are
+   * never disturbed and every seed reproduces the same cave network.
+   */
+  private carveCaves(): void {
+    for (let x = -this.size; x <= this.size; x += 1) {
+      for (let z = -this.size; z <= this.size; z += 1) {
+        // Surface terrain sits roughly within y ∈ [0, 12]; caves open below it.
+        for (let y = 2; y <= 9; y += 1) {
+          // Wide, winding voids from a low-frequency field.
+          const cavity =
+            Math.sin((x + this.seed * 0.7) * 0.31) *
+            Math.cos((z - this.seed * 0.3) * 0.37) *
+            Math.sin((y + this.seed) * 0.5);
+          // Intermittent short tunnels that thread between chambers.
+          const tunnel =
+            Math.abs(Math.sin((x * 0.9 + z * 0.5 + y * 0.7 + this.seed) * 1.35)) < 0.42 &&
+            hash(x + y, z + y * 2, this.seed) > 0.42 &&
+            y > 3;
+          if ((cavity > 0.62 || tunnel) && !this.isSupportColumn(x, y - 1, z)) {
+            this.blocks.delete(key(x, y, z));
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * True when the block below a potential cave cell is still solid stone, so
+   * caverns never open a hole straight down to bedrock/void beneath a player.
+   */
+  private isSupportColumn(x: number, y: number, z: number): boolean {
+    for (let below = y; below >= 1; below -= 1) {
+      if (this.get(x, below, z) === "stone" || this.get(x, below, z) === "dirt") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Scatter the Phase-3 mineral ores through the buried stone, pushing the rare
+   * ones deeper. All ores are original-colour blocks embedded at deterministic
+   * positions that any mifted touch can collect through the standard drop chain.
+   */
+  private scatterOres(): void {
+    const oreAt = (x: number, y: number, z: number): BlockType | undefined => {
+      if (this.get(x, y, z) !== "stone") return undefined;
+      const depth = y; // y=0 is bedrock; smaller y is deeper underground
+      const roll = hash(x + 31, z - 17, this.seed + y * 7);
+      // diamond only in the lowest band, tiny chance
+      if (depth <= 2 && roll < 0.012) return "diamond_ore";
+      if (depth <= 4 && roll < 0.05) return "gold_ore";
+      if (depth <= 6 && roll < 0.11) return "iron_ore";
+      if (depth <= 8 && roll < 0.18) return "copper_ore";
+      if (roll < 0.26) return "coal_ore";
+      return undefined;
+    };
+    for (let x = -this.size; x <= this.size; x += 1) {
+      for (let z = -this.size; z <= this.size; z += 1) {
+        for (let y = 1; y <= 8; y += 1) {
+          const ore = oreAt(x, y, z);
+          if (ore) this.set({ x, y, z }, ore);
+        }
+      }
+    }
   }
 
   /** Generate one small village in a broad, level plains patch for this seed. */

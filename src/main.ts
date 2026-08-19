@@ -160,9 +160,14 @@ const colors: Record<BlockType, number> = {
   water: 0x3d8ec9,
   bricks: 0x9b5341,
   glass: 0x9edfe5,
+  coal_ore: 0x3b3f44,
+  copper_ore: 0xd07a3a,
+  iron_ore: 0xc9a06a,
+  gold_ore: 0xe8c94c,
+  diamond_ore: 0x5ad2d0,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -226,6 +231,13 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     }
   } else if (type === "grass" && face === "bottom") {
     paint(new THREE.Color(colors.dirt));
+  } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore") {
+    // Ores: stone host rock with a bright mineral core and scattered flecks.
+    paint(new THREE.Color(colors.stone));
+    for (let y = 2; y < 16; y += 3) for (let x = 2; x < 16; x += 3) {
+      paint(base.clone().multiplyScalar(0.85 + noise(x, y) * 0.3), x, y, 3, 3);
+      if (noise(x + 5, y + 5) > 0.55) paint(new THREE.Color(0xffffff).multiplyScalar(0.8 + noise(x, y) * 0.25), x + 1, y, 1, 1);
+    }
   } else {
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {

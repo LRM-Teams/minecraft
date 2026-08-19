@@ -91,4 +91,64 @@ describe("VoxelWorld", () => {
     expect(planks).toBeGreaterThan(0);
     expect(wood).toBeGreaterThan(0);
   });
+
+  it("carves deterministic underground caves without touching the surface or villages", () => {
+    const seed = 2026;
+    const one = new VoxelWorld(seed, 48);
+    const two = new VoxelWorld(seed, 48);
+    // Determinism: both worlds carve the exact same set of underground cells.
+    expect(one.snapshot().blocks).toEqual(two.snapshot().blocks);
+    // Carving happened: some deep cells became air well below the surface top.
+    let carved = 0;
+    for (let x = -20; x <= 20; x += 1) {
+      for (let z = -20; z <= 20; z += 1) {
+        const top = one.topY(x, z);
+        for (let y = 1; y < Math.max(1, top - 3); y += 1) {
+          if (!one.get(x, y, z)) carved += 1;
+        }
+      }
+    }
+    expect(carved).toBeGreaterThan(0);
+    // The village still anchors above solid ground and its plaza block survives.
+    const village = one.villages[0];
+    if (village) {
+      expect(one.isSolid(village.plaza.x, village.plaza.y - 1, village.plaza.z)).toBe(true);
+    }
+  });
+
+  it("embeds the five mineral ores underground, with rarer ores deeper and scarcer", () => {
+    const world = new VoxelWorld(2026, 48);
+    const counts: Record<string, number> = { coal_ore: 0, copper_ore: 0, iron_ore: 0, gold_ore: 0, diamond_ore: 0 };
+    let surfaceOre = 0;
+    world.blocks.forEach((type, key) => {
+      if (!(type in counts)) return;
+      counts[type] += 1;
+      const y = Number(key.split(",")[1]);
+      if (y > 9) surfaceOre += 1;
+    });
+    // All five ores appear.
+    Object.values(counts).forEach((count) => expect(count).toBeGreaterThan(0));
+    // Scarcer / more valuable ores live only in the deep band, never near surface.
+    expect(counts.diamond_ore).toBeLessThan(counts.iron_ore);
+    expect(counts.diamond_ore).toBeLessThan(counts.copper_ore);
+    expect(counts.gold_ore).toBeLessThan(counts.coal_ore);
+    // No ore leaks above the underground band (surface stays untouched).
+    expect(surfaceOre).toBe(0);
+  });
+
+  it("round-trips mined ores through a snapshot for archive-compatible reloads", () => {
+    const world = new VoxelWorld(2026, 48);
+    // Find any ore cell and mine it away, then reload from a snapshot.
+    const oreCell = [...world.blocks.entries()].find(([, type]) => type === "coal_ore");
+    expect(oreCell).toBeTruthy();
+    if (!oreCell) return;
+    const [position, type] = oreCell;
+    const [x, y, z] = position.split(",").map(Number);
+    expect(world.get(x, y, z)).toBe(type);
+    expect(world.remove({ x, y, z })).toBe(type);
+    const restored = VoxelWorld.fromSnapshot(world.snapshot(), world.size);
+    expect(restored.get(x, y, z)).toBeUndefined();
+    // Every surviving block, ores included, survives the snapshot round-trip.
+    expect(restored.snapshot().blocks).toEqual(world.snapshot().blocks);
+  });
 });

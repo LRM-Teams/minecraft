@@ -9,4 +9,17 @@ describe("mining", () => {
   it("does not allow collecting environmental water as a normal block", () => {
     expect(isMineable("water")).toBe(false);
   });
+
+  it("makes every mineral ore mineable and harder to break than plain stone", () => {
+    const ores = ["coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore"] as const;
+    const stoneTime = breakDuration("stone");
+    ores.forEach((ore) => {
+      expect(isMineable(ore)).toBe(true);
+      expect(breakDuration(ore)).toBeGreaterThanOrEqual(stoneTime);
+    });
+    // Rarer ores are progressively slower to extract.
+    expect(breakDuration("diamond_ore")).toBeGreaterThan(breakDuration("gold_ore"));
+    expect(breakDuration("gold_ore")).toBeGreaterThan(breakDuration("iron_ore"));
+    expect(breakDuration("iron_ore")).toBeGreaterThan(breakDuration("coal_ore"));
+  });
 });
