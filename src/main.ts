@@ -23,6 +23,14 @@ import {
   type PortalLink,
   type PortalSide,
 } from "./nether";
+import {
+  crystalPillars,
+  END_BLOCKS,
+  EndWorld,
+  endSpawn,
+  type EndBlockId,
+} from "./end";
+import { createEnderDragon, updateEnderDragon, type EnderDragon } from "./enderDragon";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -41,7 +49,7 @@ app.innerHTML = `
     <div id="biome-state"></div>
     <div id="dimension-state"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · G 图鉴 · P 村庄坐标</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · B 末地之门 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <aside id="codex" class="hidden">
@@ -60,7 +68,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门 · B 末地之门</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -180,6 +188,14 @@ const netherColors: Record<NetherBlockId, number> = {
 };
 const netherLabels: Record<NetherBlockId, string> = {
   netherrack: "地狱岩", obsidian: "黑曜石", lava: "熔岩", glowstone: "萤石", nether_portal: "传送门",
+};
+
+/** Original void palette for the End dimension's module-internal blocks. */
+const endColors: Record<EndBlockId, number> = {
+  end_stone: 0xdfe2d5,
+  obsidian: 0x2b2333,
+  end_rock: 0xb7a88f,
+  end_portal: 0x37e0c0,
 };
 
 /** Block types whose per-instance colors may be recoloured by biome variant. */
@@ -443,6 +459,104 @@ class NetherRenderer {
   objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
 }
 
+/** A per-material texture helper for the module-internal End blocks. */
+const endMaterial = (type: EndBlockId): THREE.MeshLambertMaterial => new THREE.MeshLambertMaterial({
+  color: 0xffffff,
+  map: blockTextureEnd(type),
+  transparent: type === "end_portal",
+  opacity: type === "end_portal" ? 0.85 : 1,
+  // End meshes never set per-instance colours, so vertexColors stays off.
+  vertexColors: false,
+});
+
+/** Build a 16px runtime texture for an End-only block (no overworld shared cache). */
+const endTextureCache = new Map<string, THREE.CanvasTexture>();
+const blockTextureEnd = (type: EndBlockId): THREE.CanvasTexture => {
+  const cached = endTextureCache.get(type);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas texture context is unavailable");
+  const base = new THREE.Color(endColors[type]);
+  const paint = (color: THREE.Color, x = 0, y = 0, width = 16, height = 16): void => {
+    context.fillStyle = colorHex(color);
+    context.fillRect(x, y, width, height);
+  };
+  const noise = (x: number, y: number): number => {
+    const seed = type.split("").reduce((total, c) => total + c.charCodeAt(0), 0);
+    return Math.abs(Math.sin((x + 1) * 12.91 + (y + 1) * 78.23 + seed * 0.37)) % 1;
+  };
+  if (type === "end_portal") {
+    // Pulsing pale-teal exit gate.
+    paint(new THREE.Color(0x9b2bd8));
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if ((x + y) % 4 === 0 || noise(x, y) > 0.7) paint(new THREE.Color(0x37e0c0), x, y, 2, 2);
+    }
+  } else if (type === "obsidian") {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.5) paint(base.clone().multiplyScalar(1.18 + noise(x + 4, y) * 0.3), x, y, 2, 2);
+    }
+  } else {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.7 + noise(x + 4, y) * 0.5), x, y, 2, 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  endTextureCache.set(type, texture);
+  return texture;
+};
+
+const endMaterialFor = (type: EndBlockId): THREE.Material => endMaterial(type);
+
+/**
+ * Renders the End sub-world terrain. Independent of `BlockRenderer` since these
+ * blocks are not part of `BLOCK_TYPES`.
+ */
+class EndRenderer {
+  private meshes = new Map<EndBlockId, THREE.InstancedMesh>();
+  private positions = new Map<EndBlockId, BlockPosition[]>();
+
+  rebuild(entries: { position: BlockPosition; type: EndBlockId }[]): void {
+    this.meshes.forEach((mesh) => {
+      scene.remove(mesh);
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((material) => material.dispose());
+    });
+    this.meshes.clear();
+    this.positions.clear();
+    END_BLOCKS.forEach((type) => this.positions.set(type, []));
+    entries.forEach(({ position, type }) => this.positions.get(type)?.push(position));
+    END_BLOCKS.forEach((type) => {
+      const positions = this.positions.get(type) ?? [];
+      if (!positions.length) return;
+      const mesh = new THREE.InstancedMesh(box, endMaterialFor(type), positions.length);
+      mesh.castShadow = type !== "end_portal";
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      positions.forEach((position, index) => {
+        matrix.makeTranslation(position.x, position.y, position.z);
+        mesh.setMatrixAt(index, matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.positions = positions;
+      mesh.userData.end = true;
+      this.meshes.set(type, mesh);
+      scene.add(mesh);
+    });
+  }
+
+  show(): void { this.meshes.forEach((mesh) => { mesh.visible = true; }); }
+  hide(): void { this.meshes.forEach((mesh) => { mesh.visible = false; }); }
+  objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
+}
+
 const loadedSlot = loadActiveWorld();
 const saved = loadedSlot?.save;
 let activeWorldId = loadedSlot?.id;
@@ -452,37 +566,65 @@ const blocks = new BlockRenderer();
 // --- Phase-3 nether dimension state ---
 let nether = saved?.player.nether ? NetherWorld.fromSnapshot(saved.player.nether) : new NetherWorld(world.seed);
 /** Which dimension the camera currently inhabits. */
-let dimension: "overworld" | "nether" = saved?.player.dimension ?? "overworld";
+let dimension: "overworld" | "nether" | "end" = saved?.player.dimension ?? "overworld";
 /** Overworld portal anchor (along with a linked nether anchor). */
 let portalLinks: PortalLink[] = [];
 const netherChunks = new NetherRenderer(); // nether sub-world terrain
 const overworldPortal = new NetherRenderer(); // overworld portal frame overlay
 
-const currentTopY = (x: number, z: number): number => dimension === "nether" ? nether.topY(x, z) : world.topY(x, z);
-const currentSize = (): number => dimension === "nether" ? nether.size : world.size;
-const respawnPoint = (): [number, number, number] => [0, currentTopY(0, 0) + 1.72, dimension === "nether" ? 4 : 8];
+// --- Phase-3 end dimension state ---
+let endWorld = saved?.player.end ? EndWorld.fromSnapshot(saved.player.end) : new EndWorld(world.seed);
+const endChunks = new EndRenderer(); // end sub-world terrain
+let endDragon = createEnderDragon(9001); // boss lives only inside the End
+let endDragonGroup: THREE.Group | undefined;
+let endCleared = false;
+
+const currentTopY = (x: number, z: number): number => {
+  if (dimension === "nether") return nether.topY(x, z);
+  if (dimension === "end") return endWorld.topY(x, z);
+  return world.topY(x, z);
+};
+const currentSize = (): number => dimension === "end" ? endWorld.size : dimension === "nether" ? nether.size : world.size;
+const respawnPoint = (): [number, number, number] => {
+  if (dimension === "end") {
+    const s = endSpawn();
+    return [s.x, endWorld.topY(s.x, s.z) + 1.72, s.z];
+  }
+  return [0, currentTopY(0, 0) + 1.72, dimension === "nether" ? 4 : 8];
+};
 
 const applyDimensionEnvironment = (): void => {
   const inNether = dimension === "nether";
-  scene.background = inNether ? new THREE.Color("#3a0f16") : skyColor;
-  fog.color.copy(inNether ? new THREE.Color("#2b070c") : skyColor);
-  sun.intensity = inNether ? 0.6 : 0.15 + ((performance.now() % 150000) / 150000) * 2.65;
-  daylight.color.set(inNether ? "#c96a5a" : "#d8efff");
-  daylight.intensity = inNether ? 1.5 : 2.2;
-  cloudGroup.visible = !inNether;
+  const inEnd = dimension === "end";
+  scene.background = inNether ? new THREE.Color("#3a0f16") : inEnd ? new THREE.Color("#0a0a12") : skyColor;
+  fog.color.copy(inNether ? new THREE.Color("#2b070c") : inEnd ? new THREE.Color("#05050a") : skyColor);
+  sun.intensity = inNether ? 0.6 : inEnd ? 0.35 : 0.15 + ((performance.now() % 150000) / 150000) * 2.65;
+  daylight.color.set(inNether ? "#c96a5a" : inEnd ? "#b9b3d9" : "#d8efff");
+  daylight.intensity = inNether ? 1.5 : inEnd ? 1.1 : 2.2;
+  cloudGroup.visible = !inNether && !inEnd;
 };
 
 const syncDimensionState = (): void => {
   const dimensionText = document.querySelector<HTMLDivElement>("#dimension-state")!;
-  dimensionText.textContent = dimension === "nether" ? "下界 · NETHER" : "主世界 · OVERWORLD";
+  dimensionText.textContent = dimension === "nether" ? "下界 · NETHER" : dimension === "end" ? "末地 · THE END" : "主世界 · OVERWORLD";
   if (dimension === "nether") {
     blocks.hide();
     overworldPortal.hide();
     netherChunks.show();
+    endChunks.hide();
+    if (endDragonGroup) endDragonGroup.visible = false;
+  } else if (dimension === "end") {
+    blocks.hide();
+    overworldPortal.hide();
+    netherChunks.hide();
+    endChunks.show();
+    spawnDragonMesh();
   } else {
     blocks.show();
     overworldPortal.show();
     netherChunks.hide();
+    endChunks.hide();
+    if (endDragonGroup) endDragonGroup.visible = false;
   }
   applyDimensionEnvironment();
 };
@@ -808,12 +950,26 @@ const portalEntriesNear = (): { position: BlockPosition; type: NetherBlockId }[]
   });
   return entries;
 };
+/** End blocks within the visible chunk radius around the camera. */
+const endEntriesNear = (): { position: BlockPosition; type: EndBlockId }[] => {
+  const entries: { position: BlockPosition; type: EndBlockId }[] = [];
+  const cx = Math.floor(camera.position.x / CHUNK_SIZE);
+  const cz = Math.floor(camera.position.z / CHUNK_SIZE);
+  endWorld.blocks.forEach((type, positionKey) => {
+    const [x, y, z] = positionKey.split(",").map(Number);
+    if (Math.abs(Math.floor(x / CHUNK_SIZE) - cx) > 2 || Math.abs(Math.floor(z / CHUNK_SIZE) - cz) > 2) return;
+    entries.push({ position: { x, y, z }, type });
+  });
+  return entries;
+};
 const syncRenderedChunks = (force = false): void => {
   const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
   if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
   if (dimension === "nether") {
     netherChunks.rebuild(netherEntriesNear());
+  } else if (dimension === "end") {
+    endChunks.rebuild(endEntriesNear());
   } else {
     blocks.rebuild(world, camera.position.x, camera.position.z);
     overworldPortal.rebuild(portalEntriesNear());
@@ -913,6 +1069,9 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   raidCooldown = 0;
   // Joining a room always lands in the overworld; the nether derives from the synced seed.
   nether = new NetherWorld(world.seed);
+  endWorld = new EndWorld(world.seed);
+  endDragon = createEnderDragon(9001);
+  endCleared = false;
   portalLinks = [];
   dimension = "overworld";
   syncDimensionState();
@@ -930,7 +1089,7 @@ let mineHeld = false;
 let miningKey: string | undefined;
 let miningProgress = 0;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot() });
+const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot(), end: endWorld.snapshot() });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
     dirty = false;
@@ -1089,8 +1248,11 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   spawnGuardians();
   raids = [];
   raidCooldown = 0;
-  // Restore the per-world nether sub-world + dimension if the slot carries one.
+  // Restore the per-world nether + end sub-worlds and dimension if the slot carries one.
   nether = slot.save.player.nether ? NetherWorld.fromSnapshot(slot.save.player.nether) : new NetherWorld(world.seed);
+  endWorld = slot.save.player.end ? EndWorld.fromSnapshot(slot.save.player.end) : new EndWorld(world.seed);
+  endDragon = createEnderDragon(9001);
+  endCleared = false;
   portalLinks = [];
   dimension = slot.save.player.dimension ?? "overworld";
   renderRaidState();
@@ -1114,6 +1276,7 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   inventory: createInventory(),
   dimension: "overworld",
   nether: new NetherWorld(nextWorld.seed).snapshot(),
+  end: new EndWorld(nextWorld.seed).snapshot(),
 });
 
 const createNewWorld = (name: string): void => {
@@ -1270,6 +1433,14 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "KeyN" && !event.repeat) {
     soundscape.unlock();
     placePortal();
+  }
+  if (event.code === "KeyB" && !event.repeat) {
+    soundscape.unlock();
+    if (dimension === "overworld") {
+      enterEnd();
+    } else {
+      status.textContent = "仅在主世界可开启末地之门";
+    }
   }
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
@@ -1460,6 +1631,112 @@ const updateNetherEcology = (delta: number): void => {
   }
 };
 
+/** Build the Ender Dragon's original voxel-style flying body (a three.Group). */
+const spawnDragonMesh = (): void => {
+  if (endDragonGroup) { endDragonGroup.visible = true; return; }
+  const group = new THREE.Group();
+  const dark = new THREE.MeshLambertMaterial({ color: 0x1b1b23 });
+  const belly = new THREE.MeshLambertMaterial({ color: 0x66d9c8 });
+  const horn = new THREE.MeshLambertMaterial({ color: 0xd8d2b8 });
+  const eyeGlow = new THREE.MeshBasicMaterial({ color: 0x91fff0 });
+  const bodyGeo = new THREE.BoxGeometry(2.2, 1.2, 3.4);
+  const body = new THREE.Mesh(bodyGeo, dark);
+  const bellyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 2.6), belly);
+  bellyMesh.position.set(0, -0.55, 0.3);
+  body.add(bellyMesh);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.9, 1.1), dark);
+  head.position.set(0, 0.25, -1.9);
+  body.add(head);
+  const leftHorn = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), horn);
+  leftHorn.position.set(0.32, 0.6, -1.9);
+  const rightHorn = leftHorn.clone();
+  rightHorn.position.x = -0.32;
+  const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.1), eyeGlow);
+  leftEye.position.set(0.3, 0.35, -2.5);
+  const rightEye = leftEye.clone();
+  rightEye.position.x = -0.3;
+  const wingLeft = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.18, 1.6), dark);
+  wingLeft.position.set(2.4, 0.3, 0.2);
+  const wingRight = wingLeft.clone();
+  wingRight.position.x = -2.4;
+  group.add(body, head, leftHorn, rightHorn, leftEye, rightEye, wingLeft, wingRight);
+  group.userData.dragon = true;
+  scene.add(group);
+  endDragonGroup = group;
+  endDragonGroup.visible = dimension === "end";
+};
+
+/** End-only ecology each frame: the dragon patrols, fights, and a healed exit awaits. */
+let nextMobIdEnd = 10000;
+const updateEndEcology = (delta: number): void => {
+  // Step out of the End by touching the central exit portal.
+  if (endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)) === "end_portal"
+      || endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y) - 1, Math.round(camera.position.z)) === "end_portal") {
+    exitEnd();
+    return;
+  }
+  if (endDragon.dead || endCleared) {
+    if (endCleared) { biomeText.textContent = "末影龙已击败 · 返回传送门已点亮"; }
+    return;
+  }
+  const result = updateEnderDragon(endDragon, camera.position, delta, endWorld.seed, () => nextMobIdEnd++);
+  result.summons.forEach((m) => { if (!mobs.some((exist) => exist.id === m.id)) mobs.push(m); });
+  mobs.length && syncMobMeshes();
+  if (result.defeated) {
+    endCleared = true;
+    const loot = endDragon.loot;
+    loot.forEach((drop) => {
+      const typed = drop as keyof typeof inventory;
+      if (typed in inventory && inventory[typed] !== undefined) inventory[typed] += 1;
+    });
+    status.textContent = "末影龙已被你击败！";
+    renderHotbar();
+    renderHealth();
+    persist();
+  }
+  if (endDragonGroup) {
+    endDragonGroup.position.set(
+      Math.round(endDragon.x * 2) / 2,
+      Math.round(endDragon.y * 2) / 2,
+      Math.round(endDragon.z * 2) / 2,
+    );
+    const tilt = endDragon.state === "charging" ? 0.5 : Math.sin(endDragon.angle) * 0.25;
+    endDragonGroup.rotation.y = Math.atan2(camera.position.x - endDragon.x, camera.position.z - endDragon.z);
+    endDragonGroup.rotation.x = tilt;
+  }
+};
+
+const enterEnd = (): void => {
+  dimension = "end";
+  endDragon = endDragon.dead ? endDragon : createEnderDragon(9001);
+  const s = endSpawn();
+  const groundY = endWorld.topY(s.x, s.z) + 1.72;
+  camera.position.set(s.x, Math.max(groundY, s.y + 0.5), s.z);
+  verticalVelocity = 0;
+  groundPlayerIfBuried();
+  syncRenderedChunks(true);
+  syncDimensionState();
+  dirty = true;
+  persist();
+  status.textContent = "已进入末地 · 击败末影龙以开启返回";
+  soundscape.play("place");
+};
+
+const exitEnd = (): void => {
+  if (dimension !== "end") return;
+  dimension = "overworld";
+  const groundY = world.topY(0, 0) + 1.72;
+  camera.position.set(0, groundY, 8);
+  verticalVelocity = 0;
+  endDragonGroup?.visible && (endDragonGroup.visible = false);
+  syncRenderedChunks(true);
+  syncDimensionState();
+  dirty = true;
+  persist();
+  status.textContent = "已返回主世界";
+  soundscape.play("place");
+};
+
 /** A portal frame + opening built in the overworld, linked to the nether. */
 const placePortal = (): void => {
   if (dimension !== "overworld") { status.textContent = "下界中无法再搭建传送门"; return; }
@@ -1485,7 +1762,7 @@ const placePortal = (): void => {
 /** When the player stands inside the active dimension's portal opening, cross over. */
 const tryEnterPortal = (): boolean => {
   for (const link of portalLinks) {
-    const from: PortalSide = dimension;
+    const from: PortalSide = dimension === "end" ? "overworld" : dimension;
     const anchor = from === "overworld" ? link.overworld : link.nether;
     if (!isWithinPortalOpening(anchor, link.geometry, Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z))) continue;
     const dest = teleportPosition(link, from, camera.position);
@@ -1523,6 +1800,10 @@ const frame = (now: number): void => {
       updateVillagersLoop(delta);
       updateRaidsLoop(delta);
       renderBiomeState();
+    } else if (dimension === "end") {
+      updateEndEcology(delta);
+      updateMobs(delta);
+      syncMobMeshes();
     } else {
       updateNetherEcology(delta);
       renderNetherState();
