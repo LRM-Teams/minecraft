@@ -135,14 +135,23 @@ export class VoxelWorld {
         if (profile.aquatic) {
           for (let y = height + 1; y <= seaLevel; y += 1) this.set({ x, y, z }, "water");
         }
-        if (
+        const edges = Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2;
+        const willTree =
           profile.id !== "desert"
           && profile.treeThreshold < 1
           && height >= seaLevel + 1
           && hash(x + 99, z - 24, this.seed) > profile.treeThreshold
-          && Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2
-        ) {
+          && edges;
+        if (willTree) {
           this.addTree(x, height + 1, z);
+        } else if (
+          profile.flowerBlock
+          && profile.flowerChance !== undefined
+          && height >= seaLevel + 1
+          && hash(x + 5, z - 13, this.seed) > profile.flowerChance
+          && edges
+        ) {
+          this.set({ x, y: height + 1, z }, profile.flowerBlock);
         }
       }
     }

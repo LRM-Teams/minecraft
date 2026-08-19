@@ -10,6 +10,7 @@ import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { biomeAt, type BiomeVariant } from "./biomes";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -25,6 +26,7 @@ app.innerHTML = `
     <div id="village-state"></div>
     <div id="guardian-state"></div>
     <div id="raid-state"></div>
+    <div id="biome-state"></div>
     <div id="crosshair">+</div>
     <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
@@ -132,6 +134,16 @@ const labels: Record<BlockType, string> = {
   grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃",
 };
 
+/** Block types whose per-instance colors may be recoloured by biome variant. */
+const BIOME_TINTABLE: ReadonlySet<BlockType> = new Set<BlockType>(["grass", "leaves", "wood", "planks"] as const);
+/** Per-variant colour wash (multiplies the block texture) for the Phase-3 biomes. */
+const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
+  // Pale Garden: cold grey-blue desaturation → eerie, misty wood.
+  pale: new THREE.Color(0xb9bfce),
+  // Sakura: warm pink wash → cherry-blossom canopies and petal floor.
+  sakura: new THREE.Color(0xf0b8c6),
+};
+
 type BlockFace = "side" | "top" | "bottom";
 const textureCache = new Map<string, THREE.CanvasTexture>();
 const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
@@ -198,6 +210,7 @@ const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
     opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
     depthWrite: type !== "water" && type !== "glass",
+    vertexColors: true,
   });
   if (type !== "grass") return material();
   const side = material("side");
@@ -229,11 +242,22 @@ class BlockRenderer {
       mesh.castShadow = type !== "leaves";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
+      const tintable = BIOME_TINTABLE.has(type);
+      const tintCache = new Map<BiomeVariant, THREE.Color>();
       positions.forEach((position, index) => {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
+        if (tintable) {
+          const variant = biomeAt(position.x, position.z, world.seed).variant;
+          if (variant !== "default") {
+            let color = tintCache.get(variant);
+            if (!color) { color = BIOME_TINTS[variant].clone(); tintCache.set(variant, color); }
+            mesh.setColorAt(index, color);
+          }
+        }
       });
       mesh.instanceMatrix.needsUpdate = true;
+      if (tintable && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.userData.positions = positions;
       this.meshes.set(type, mesh);
       scene.add(mesh);
@@ -493,6 +517,7 @@ const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
 const guardianText = document.querySelector<HTMLDivElement>("#guardian-state")!;
 const raidText = document.querySelector<HTMLDivElement>("#raid-state")!;
+const biomeText = document.querySelector<HTMLDivElement>("#biome-state")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -526,8 +551,14 @@ const renderRaidState = (): void => {
   const activeRaid = raids.find((raid) => raid.active && !raid.defeated);
   raidText.textContent = activeRaid ? raidProgress(activeRaid) : "";
 };
+
+const renderBiomeState = (): void => {
+  const profile = biomeAt(Math.floor(camera.position.x), Math.floor(camera.position.z), world.seed);
+  biomeText.textContent = `${profile.name} · ${profile.id}`;
+};
 renderVillageState();
 renderGuardianState();
+renderBiomeState();
 let loadedChunkX = Number.NaN;
 let loadedChunkZ = Number.NaN;
 const syncRenderedChunks = (force = false): void => {
@@ -1132,6 +1163,7 @@ const frame = (now: number): void => {
     updateGuardiansLoop(delta);
     updateVillagersLoop(delta);
     updateRaidsLoop(delta);
+    renderBiomeState();
     if (room && now >= nextNetworkBroadcast) {
       room.updateLocalPlayer(localPlayer());
       room.announcePlayer();
