@@ -11,6 +11,11 @@ const DURATIONS: Record<BlockType, number> = {
   water: Number.POSITIVE_INFINITY,
   bricks: 0.95,
   glass: 0.22,
+  coal_ore: 1.1,
+  copper_ore: 1.3,
+  iron_ore: 1.5,
+  gold_ore: 1.8,
+  diamond_ore: 2.2,
 };
 
 export const breakDuration = (block: BlockType): number => DURATIONS[block];

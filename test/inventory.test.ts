@@ -34,4 +34,13 @@ describe("crafting", () => {
     expect(inventory.stone).toBe(3);
     expect(inventory.sand).toBe(3);
   });
+
+  it("accepts collected mineral ores into the shared drop inventory", () => {
+    const inventory = createInventory({ coal_ore: 4, diamond_ore: 1 });
+    expect(inventory.coal_ore).toBe(4);
+    expect(inventory.diamond_ore).toBe(1);
+    expect(inventory.iron_ore).toBe(0);
+    // A freshly built inventory defaults every ore slot to zero.
+    expect(createInventory().coal_ore).toBe(0);
+  });
 });
