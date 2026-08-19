@@ -89,6 +89,24 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 app.prepend(renderer.domElement);
 
+// --- WebGL context-loss resilience: recover a black/blank scene after the GPU
+// restores its context (driver switch / power events) instead of staying black. ---
+let rendererLost = false;
+renderer.domElement.addEventListener("webglcontextlost", (event) => {
+  event.preventDefault();
+  rendererLost = true;
+}, false);
+renderer.domElement.addEventListener("webglcontextrestored", () => {
+  rendererLost = false;
+  // Force a full rebuild of the active dimension's renderables so textures and
+  // meshes come back after the GPU restores its context.
+  loadedChunkX = NaN;
+  loadedChunkZ = NaN;
+  syncRenderedChunks(true);
+  syncDimensionState();
+  status.textContent = "图形上下文已恢复";
+}, false);
+
 const sun = new THREE.DirectionalLight("#fff2c5", 2.8);
 sun.position.set(-20, 32, 14);
 sun.castShadow = true;
@@ -302,7 +320,9 @@ const netherMaterial = (type: NetherBlockId): THREE.MeshLambertMaterial => new T
   map: blockTextureNether(type),
   transparent: type === "lava",
   opacity: type === "lava" ? 0.9 : 1,
-  vertexColors: true,
+  // No per-instance colors are ever set on nether meshes: enabling vertexColors
+  // on an InstancedMesh without instanceColor renders black on some GPUs.
+  vertexColors: false,
 });
 
 /** Build a 16px runtime texture for a nether-only block (no overworld shared cache). */
@@ -1510,7 +1530,7 @@ const frame = (now: number): void => {
   }
   findTarget();
   updateMining(delta);
-  renderer.render(scene, camera);
+  if (!rendererLost) renderer.render(scene, camera);
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);
