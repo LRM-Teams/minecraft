@@ -12,6 +12,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 #network-state { position: absolute; top: 121px; left: 24px; color: #a8d7e9; font-size: 10px; opacity: .9; }
 #village-state { position: absolute; top: 138px; left: 24px; color: #e9cf9a; font-size: 10px; opacity: .9; }
 #guardian-state { position: absolute; top: 155px; left: 24px; color: #c5ddae; font-size: 10px; opacity: .9; }
+#biome-state { position: absolute; top: 172px; left: 24px; color: #d8c8f0; font-size: 10px; opacity: .92; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: 28px; font-weight: 300; }
 #hint { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; color: #edf7ff; opacity: .9; }
 #status { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); min-width: 120px; text-align: center; color: #fff7c9; font-size: 12px; }
@@ -38,4 +39,4 @@ button.link { margin-top: 14px; border-color: #66766c; padding: 8px; background:
 .room-fields input { min-width: 0; border: 1px solid #6b969f; padding: 8px; background: #16272d; color: #fff; font: inherit; font-size: 11px; }
 .room-button { margin-top: 7px; padding: 8px; border-color: #8ac4d8; background: #39778c; box-shadow: none; font-size: 11px; }
 #room-status { display: block; margin-top: 7px; color: #a9c8d1; font-size: 9px; }
-@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #audio-state { left: 12px; top: 92px; } #network-state { left: 12px; top: 108px; } #village-state { left: 12px; top: 124px; } #guardian-state { left: 12px; top: 140px; } #codex { top: 156px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }
+@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #audio-state { left: 12px; top: 92px; } #network-state { left: 12px; top: 108px; } #village-state { left: 12px; top: 124px; } #guardian-state { left: 12px; top: 140px; } #biome-state { left: 12px; top: 156px; } #codex { top: 156px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }

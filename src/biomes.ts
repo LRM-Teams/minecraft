@@ -18,8 +18,24 @@ import type { BlockType } from "./world";
 export const BIOME_CELL = 24;
 
 /** Identifiable biomes. At least 3 are required by the acceptance criteria. */
-export const BIOMES = ["plains", "forest", "desert", "mountains"] as const;
+export const BIOMES = ["plains", "forest", "desert", "mountains", "pale", "cherry"] as const;
 export type BiomeId = (typeof BIOMES)[number];
+
+/** Optional render-hint palette for a biome. Kept module-internal so we never
+ *  add new `BlockType` enum members (which would break save compatibility):
+ *  pale trunks/foliage, cherry blossom petals and the pale garden's glowing
+ *  mushrooms are all *tints* over the existing storage blocks, applied only
+ *  when rendering — stored blocks stay `wood`/`leaves` in every snapshot. */
+export interface BiomePalette {
+  /** Foliage tint (hex). Omit to use the global leaf colour. */
+  foliage?: number;
+  /** Trunk tint (hex) for `wood` placed by this biome's trees. */
+  trunk?: number;
+  /** Surface tint (hex) — cherry gives its ground a pink petal cast. */
+  surfaceTint?: number;
+  /** Pale garden's glowing mushrooms (module-internal structure). */
+  glowingMushroom?: boolean;
+}
 
 /** Rules used to shape a column of terrain in a given biome. */
 export interface BiomeProfile {
@@ -43,6 +59,10 @@ export interface BiomeProfile {
   treeThreshold: number;
   /** Whether the biome floods low areas with water. */
   aquatic: boolean;
+  /** Palette render hints (all optional, module-internal colour/materials). */
+  palette?: BiomePalette;
+  /** Tree silhouette this biome spawns (affects `world.addTree`). */
+  treeShape?: "oak" | "pale" | "cherry";
 }
 
 /** Ordered registry. `index ↔ id` must stay stable for a given seed. */
@@ -67,6 +87,21 @@ const PROFILES: Record<BiomeId, BiomeProfile> = {
     surface: "grass", subsurface: "stone", underground: "stone", seaLevel: 3,
     treeThreshold: 0.985, aquatic: true,
   },
+  // Original Phase-3 biome: a gloomy grey-white garden with pale trees and
+  // faintly glowing mushrooms. Cool & moist climate niche.
+  pale: {
+    id: "pale", name: "苍白花园", baseHeight: 5, amplitude: 1.1, roughness: 0.85,
+    surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
+    treeThreshold: 0.88, aquatic: true, treeShape: "pale",
+    palette: { foliage: 0x9aa7ad, trunk: 0xb3b9bd, surfaceTint: 0x6f7a80, glowingMushroom: true },
+  },
+  // Original Phase-3 biome: warm pink cherry-blossom groves with petal dust.
+  cherry: {
+    id: "cherry", name: "樱花", baseHeight: 5.5, amplitude: 1.3, roughness: 0.9,
+    surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
+    treeThreshold: 0.78, aquatic: true, treeShape: "cherry",
+    palette: { foliage: 0xf29db4, trunk: 0x7a4e43, surfaceTint: 0xe9b8c3 },
+  },
 };
 
 const BIOME_IDS: BiomeId[] = BIOMES.slice();
@@ -87,7 +122,9 @@ const biomeForCell = (cx: number, cz: number, seed: number): BiomeId => {
   const heat = hash(cx, cz, seed * 101 + 7);
   const moisture = hash(cx * 2 + 13, cz * 3 - 5, seed * 33 + 1);
   if (moisture > 0.74) return "forest";      // wet → lush
+  if (heat > 0.62 && moisture > 0.55) return "cherry";  // warm & damp → pink groves
   if (heat > 0.58) return "desert";           // hot & dry → sand
+  if (heat < 0.34 && moisture > 0.5) return "pale";     // cool & moist → gloomy garden
   if (heat > 0.26 && moisture < 0.5) return "mountains"; // rugged highlands
   return "plains";
 };
@@ -151,3 +188,22 @@ export const describeColumn = (
   const treeChance = hash(x * 3 + seed, z * 5 - seed * 2);
   return { biome: profile.id, profile, treeChance, height };
 };
+
+/**
+ * Module-internal palette lookup used by the renderer. Given a biome and a
+ * stored block type, returns an optional display-tint colour (hex) that lets
+ * pale/cherry biomes reproduce their signature look without introducing new
+ * `BlockType` members. Returns `undefined` when the block keeps its stock tone.
+ */
+export const blockTint = (profile: BiomeProfile, block: string): number | undefined => {
+  const palette = profile.palette;
+  if (!palette) return undefined;
+  if (block === "leaves") return palette.foliage;
+  if (block === "wood") return palette.trunk;
+  if (block === "grass") return palette.surfaceTint;
+  return undefined;
+};
+
+/** True when a biome should render the pale garden's glowing mushroom flora. */
+export const hasGlowingMushrooms = (profile: BiomeProfile): boolean =>
+  profile.palette?.glowingMushroom === true;

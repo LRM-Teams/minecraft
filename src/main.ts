@@ -10,6 +10,7 @@ import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { biomeAt, blockTint } from "./biomes";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -18,6 +19,7 @@ app.innerHTML = `
   <div id="hud">
     <div id="brand">VOXEL <span>ATELIER</span></div>
     <div id="seed"></div>
+    <div id="biome-state"></div>
     <div id="world-time"></div>
     <div id="health"></div>
     <div id="audio-state"></div>
@@ -194,6 +196,7 @@ const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
   const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
     color: 0xffffff,
     map: blockTexture(type, face),
+    vertexColors: true,
     transparent: type === "leaves" || type === "water" || type === "glass",
     opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
@@ -229,11 +232,19 @@ class BlockRenderer {
       mesh.castShadow = type !== "leaves";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
+      const white = new THREE.Color(0xffffff);
+      const instanceColor = new THREE.Color();
       positions.forEach((position, index) => {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
+        // Module-internal palette mapping: pale/cherry biomes re-tint their
+        // trunk, foliage and surface through `blockTint` without adding any
+        // new BlockType. White (multiply = stock tone) when no palette applies.
+        const tint = blockTint(biomeAt(position.x, position.z, world.seed), type);
+        mesh.setColorAt(index, tint !== undefined ? instanceColor.setHex(tint) : white);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.userData.positions = positions;
       this.meshes.set(type, mesh);
       scene.add(mesh);
@@ -486,6 +497,7 @@ const startScreen = document.querySelector<HTMLDivElement>("#start-screen")!;
 const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
+const biomeText = document.querySelector<HTMLDivElement>("#biome-state")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
@@ -1025,6 +1037,9 @@ const updatePlayer = (delta: number): void => {
   const ground = world.topY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
   if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
   if (camera.position.y < -8) camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+  // Minimal Phase-3 HUD integration: show the biome under the player, including
+  // the new pale garden (苍白花园) and cherry (樱花) environments.
+  biomeText.textContent = `所处生态 · ${biomeAt(camera.position.x, camera.position.z, world.seed).name}`;
 };
 
 const updateMobs = (delta: number): void => {

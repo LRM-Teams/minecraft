@@ -1,4 +1,4 @@
-import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
+import { describeColumn, biomeAt, hasGlowingMushrooms, type BiomeProfile } from "./biomes";
 
 export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -142,7 +142,17 @@ export class VoxelWorld {
           && hash(x + 99, z - 24, this.seed) > profile.treeThreshold
           && Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2
         ) {
-          this.addTree(x, height + 1, z);
+          this.addTree(x, height + 1, z, profile);
+        }
+        // Pale garden: scatter faintly glowing mushrooms at deterministic
+        // ground spots. Stored as `leaves` so snapshots stay save-compatible;
+        // the renderer gives them a luminous tint via the palette map.
+        if (hasGlowingMushrooms(profile) && height >= seaLevel + 1) {
+          const spot = hash(x * 7 + 31, z * 11 - 17, this.seed);
+          if (spot > 0.985 && this.get(x, height, z) === profile.surface) {
+            this.set({ x, y: height + 1, z }, "leaves");
+            if (hash(x + 1, z, this.seed) > 0.5) this.set({ x: x + 1, y: height + 1, z }, "leaves");
+          }
         }
       }
     }
@@ -260,7 +270,10 @@ export class VoxelWorld {
     return profile.underground;
   }
 
-  private addTree(x: number, y: number, z: number): void {
+  private addTree(x: number, y: number, z: number, profile: BiomeProfile): void {
+    const shape = profile.treeShape ?? "oak";
+    if (shape === "cherry") { this.addCherryTree(x, y, z); return; }
+    if (shape === "pale") { this.addPaleTree(x, y, z); return; }
     for (let trunk = 0; trunk < 4; trunk += 1) this.set({ x, y: y + trunk, z }, "wood");
     for (let dx = -2; dx <= 2; dx += 1) {
       for (let dz = -2; dz <= 2; dz += 1) {
@@ -269,5 +282,39 @@ export class VoxelWorld {
         }
       }
     }
+  }
+
+  /** Cherry blossom: short trunk, wide low pink canopy dotted with petals. */
+  private addCherryTree(x: number, y: number, z: number): void {
+    for (let trunk = 0; trunk < 3; trunk += 1) this.set({ x, y: y + trunk, z }, "wood");
+    for (let dx = -3; dx <= 3; dx += 1) {
+      for (let dz = -3; dz <= 3; dz += 1) {
+        for (let dy = 2; dy <= 3; dy += 1) {
+          const r = Math.abs(dx) + Math.abs(dz) + Math.abs(dy - 2);
+          if (r <= 4 && hash(x + dx * 3, z + dz * 5, this.seed) > 0.18) {
+            this.set({ x: x + dx, y: y + dy, z: z + dz }, "leaves");
+          }
+        }
+      }
+    }
+    // Petal drifts on the ground immediately under the canopy where it is bare.
+    for (const [px, pz] of [[x + 2, z], [x - 1, z + 2], [x, z - 2]]) {
+      if (this.get(px, y, pz) === "grass" && !this.get(px, y + 1, pz)) this.set({ x: px, y: y + 1, z: pz }, "leaves");
+    }
+  }
+
+  /** Pale garden: tall bare grey-white trunk with a sparse, gloomy canopy. */
+  private addPaleTree(x: number, y: number, z: number): void {
+    for (let trunk = 0; trunk < 6; trunk += 1) this.set({ x, y: y + trunk, z }, "wood");
+    const top = y + 5;
+    for (let dx = -2; dx <= 2; dx += 1) {
+      for (let dz = -2; dz <= 2; dz += 1) {
+        for (let dy = 4; dy <= 6; dy += 1) {
+          const d2 = dx * dx + dz * dz + Math.abs(dy - 5) * 2;
+          if (d2 <= 6 && hash(x + dx, z + dz * 2, this.seed) > 0.3) this.set({ x: x + dx, y: y + dy, z: z + dz }, "leaves");
+        }
+      }
+    }
+    this.set({ x, y: top, z }, "leaves");
   }
 }
