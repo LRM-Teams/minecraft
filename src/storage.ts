@@ -1,5 +1,6 @@
 import { VoxelWorld, type WorldSnapshot } from "./world";
 import type { NetherSnapshot } from "./nether";
+import type { EndSnapshot } from "./end";
 import type { Inventory } from "./inventory";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
@@ -15,8 +16,11 @@ export type PlayerSave = {
   pitch: number;
   selected: number;
   inventory?: Partial<Inventory>;
-  dimension?: "overworld" | "nether";
+  dimension?: "overworld" | "nether" | "end";
   nether?: NetherSnapshot;
+  end?: EndSnapshot;
+  /** Whether the End boss has been defeated (gates the exit portal). */
+  endCleared?: boolean;
   /** Wither bosses defeated → Nether Stars earned (additive optional field). */
   witherStars?: number;
 };
