@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInventory } from "../src/inventory";
 import { clearSave, createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, normaliseWorldName, renameWorldSlot, saveWorldSlot } from "../src/storage";
 import { VoxelWorld } from "../src/world";
+import { EndWorld } from "../src/end";
 
 const player = () => ({ position: [0, 6, 8] as [number, number, number], yaw: 0, pitch: 0, selected: 0, inventory: createInventory() });
 
@@ -64,5 +65,19 @@ describe("world slots", () => {
     createWorldSlot("临时", new VoxelWorld(1, 2), player());
     clearSave();
     expect(listWorldSlots()).toEqual([]);
+  });
+
+  it("persists the End sub-world across a slot round-trip", () => {
+    const world = new VoxelWorld(7, 2);
+    const withEnd = { ...player(), dimension: "end" as const, end: new EndWorld(7).snapshot() };
+    const slot = createWorldSlot("末地", world, withEnd);
+    const reloaded = loadWorldSlot(slot.id);
+    expect(reloaded?.save.player.dimension).toBe("end");
+    expect(reloaded?.save.player.end?.seed).toBe(7);
+    // The End snapshot restores an independent sub-world with obsidian platform + portal.
+    const restored = reloaded?.save.player.end ? EndWorld.fromSnapshot(reloaded.save.player.end) : undefined;
+    expect(restored?.get(0, 0, 0)).toBe("obsidian");
+    expect(restored?.get(0, 1, 0)).toBe("end_portal");
+    expect(reloaded?.save.player.nether).toBeUndefined(); // untouched additive field
   });
 });
