@@ -257,34 +257,41 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
   return texture;
 };
 
-const blockMaterial = (type: BlockType): THREE.Material | THREE.Material[] => {
-  // Per-instance colors are only ever written for tintable blocks (grass/leaves/
-  // wood/planks) so they can carry a biome wash. Enabling vertexColors on a
-  // non-tintable InstancedMesh that never writes instanceColor reads an unbound
-  // attribute on some GPUs (ANGLE/ATI/strict GL) and renders every block black —
-  // the same trap the nether material hits. So only tintable types opt in.
-  const tintable = BIOME_TINTABLE.has(type);
+const box = new THREE.BoxGeometry(1, 1, 1);
+const matrix = new THREE.Matrix4();
+/** Neutral tint (white) = no biome wash. */
+const ONE_WHITE = new THREE.Color(0xffffff);
+
+/**
+ * Build a Lambert material for a block. Biome wash is applied via `tint` on
+ * `material.color` — never via InstancedMesh `vertexColors` / `instanceColor`.
+ *
+ * Why: on several real GPUs (ANGLE / strict GL), `vertexColors:true` without a
+ * fully-bound instanceColor buffer (or even *with* setColorAt on multi-material
+ * grass meshes) still renders the mesh pitch black. The screenshot pattern
+ * "sky/UI/glass OK, grass+trees black silhouettes" is that trap. Nether/End
+ * already keep vertexColors off; overworld follows the same rule.
+ */
+const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Material | THREE.Material[] => {
   const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
-    color: 0xffffff,
+    color: tint.clone(),
     map: blockTexture(type, face),
     transparent: type === "leaves" || type === "water" || type === "glass",
     opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
     depthWrite: type !== "water" && type !== "glass",
-    vertexColors: tintable,
+    vertexColors: false,
   });
   if (type !== "grass") return material();
   const side = material("side");
   return [side, side, material("top"), material("bottom"), side, side];
 };
-const box = new THREE.BoxGeometry(1, 1, 1);
-const matrix = new THREE.Matrix4();
-/** Neutral instance colour (white) — used as the "no wash" tint so tintable meshes always have a valid instanceColor buffer. */
-const ONE_WHITE = new THREE.Color(0xffffff);
+
+type BlockMeshBucket = { type: BlockType; tint: THREE.Color; positions: BlockPosition[] };
 
 class BlockRenderer {
-  private meshes = new Map<BlockType, THREE.InstancedMesh>();
-  private positions = new Map<BlockType, BlockPosition[]>();
+  /** Keyed by `type` or `type:variant` so biome wash can use material.color safely. */
+  private meshes = new Map<string, THREE.InstancedMesh>();
 
   rebuild(world: VoxelWorld, centerX: number, centerZ: number): void {
     this.meshes.forEach((mesh) => {
@@ -293,40 +300,39 @@ class BlockRenderer {
       materials.forEach((material) => material.dispose());
     });
     this.meshes.clear();
-    this.positions.clear();
-    BLOCK_TYPES.forEach((type) => this.positions.set(type, []));
+
+    const buckets = new Map<string, BlockMeshBucket>();
     world.visibleBlocks(centerX, centerZ, 2).forEach(({ type, position }) => {
-      this.positions.get(type)?.push(position);
+      let key: string = type;
+      let tint = ONE_WHITE;
+      if (BIOME_TINTABLE.has(type)) {
+        const variant = biomeAt(position.x, position.z, world.seed).variant;
+        key = `${type}:${variant}`;
+        tint = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant];
+      }
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { type, tint, positions: [] };
+        buckets.set(key, bucket);
+      }
+      bucket.positions.push(position);
     });
-    BLOCK_TYPES.forEach((type) => {
-      const positions = this.positions.get(type) ?? [];
+
+    buckets.forEach((bucket, key) => {
+      const { type, tint, positions } = bucket;
       if (!positions.length) return;
-      const mesh = new THREE.InstancedMesh(box, blockMaterial(type), positions.length);
+      const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
       mesh.castShadow = type !== "leaves";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      const tintable = BIOME_TINTABLE.has(type);
-      const tintCache = new Map<BiomeVariant, THREE.Color>();
       positions.forEach((position, index) => {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
-        if (tintable) {
-          // Always write an instance color (default → white, i.e. no wash) so the
-          // vertexColors:true material never reads an unbound instanceColor buffer,
-          // which renders black on some GPUs.
-          const variant = biomeAt(position.x, position.z, world.seed).variant;
-          let color = tintCache.get(variant);
-          if (!color) {
-            color = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant].clone();
-            tintCache.set(variant, color);
-          }
-          mesh.setColorAt(index, color);
-        }
       });
       mesh.instanceMatrix.needsUpdate = true;
-      if (tintable && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.userData.positions = positions;
-      this.meshes.set(type, mesh);
+      mesh.userData.blockType = type;
+      this.meshes.set(key, mesh);
       scene.add(mesh);
     });
   }
