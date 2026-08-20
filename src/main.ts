@@ -4,6 +4,14 @@ import { createMob, updateEntities, type Mob, type MobKind } from "./entities";
 import { createGuardiansForWorld, updateGuardians, type VillageGuardian } from "./guardians";
 import { greetNearbyVillagers, createVillagersForWorld, tradeWithVillager, updateVillagers, villagerDrop, type Villager } from "./villagers";
 import { createRaid, updateRaid, shouldStartRaid, raidProgress, type Raid } from "./raids";
+import {
+  isWitherStructure,
+  summonWither,
+  updateWither,
+  witherDropBlocks,
+  type WitherBoss,
+  type WitherSkull,
+} from "./wither";
 import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
@@ -40,8 +48,10 @@ app.innerHTML = `
     <div id="raid-state"></div>
     <div id="biome-state"></div>
     <div id="dimension-state"></div>
+    <div id="wither-state"></div>
+    <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · G 图鉴 · P 村庄坐标</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · H 摆放灵魂沙+头颅召唤凋灵 · G 图鉴 · P 村庄坐标</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <aside id="codex" class="hidden">
@@ -60,7 +70,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门 · H 召唤凋灵 BOSS（灵魂沙+头颅）</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -497,6 +507,150 @@ let villagers: Villager[] = createVillagersForWorld(world);
 let guardians: VillageGuardian[] = createGuardiansForWorld(world);
 let raids: Raid[] = [];
 let nextRaidId = 1;
+
+// --- Phase-3 Wither boss state ---
+let withers: WitherBoss[] = [];
+let nextWitherId = 1;
+/** Nether Stars granted to the bag (additive optional save field). */
+let witherStars = saved?.player.witherStars ?? 0;
+/** Mob ids (in `mobs`) tagged as Wither skeleton minions → rendered bone-white. */
+const witherMinionIds = new Set<number>();
+const witherMeshes = new Map<number, THREE.Group>();
+const skullMeshes = new Map<number, THREE.Mesh>();
+const witherBodyGeometry = new THREE.BoxGeometry(0.9, 1.4, 0.66);
+const witherHeadGeometry = new THREE.BoxGeometry(0.62, 0.62, 0.62);
+const witherStyle = {
+  body: new THREE.MeshLambertMaterial({ color: 0x2b2622 }),
+  head: new THREE.MeshLambertMaterial({ color: 0x3a3230 }),
+  eye: new THREE.MeshBasicMaterial({ color: 0xc10f0f }),
+  glow: new THREE.MeshBasicMaterial({ color: 0x5b1a8a }),
+  minionBody: new THREE.MeshLambertMaterial({ color: 0xcfcbd4 }),
+  minionHead: new THREE.MeshLambertMaterial({ color: 0xe9e6ec }),
+};
+const skullStyle = new THREE.MeshLambertMaterial({ color: 0xa03bd8, emissive: 0x3b0f63 });
+
+const renderWitherStar = (): void => {
+  witherStarText.textContent = witherStars > 0 ? `★ 下界之星 × ${witherStars}` : "★ 下界之星 · 尚未取得";
+};
+
+const renderWitherState = (): void => {
+  const boss = withers[0];
+  if (!boss || boss.defeated) {
+    witherText.textContent = "";
+    return;
+  }
+  const ratio = Math.max(0, Math.min(1, boss.health / boss.maxHealth));
+  const pct = Math.round(ratio * 100);
+  const phases = boss.phase === "dying" ? "觉醒狂暴" : boss.phase === "combat" ? "激战中" : "召唤中";
+  witherText.innerHTML = `<div class="wither-bar"><div class="wither-fill" style="width:${pct}%"></div></div>凋灵 · ${phases} · ${pct}%`;
+};
+
+/** Distinct 3-headed Wither mesh (body + three skull heads), floats at boss.y. */
+const createWitherMesh = (boss: WitherBoss): THREE.Group => {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(witherBodyGeometry, witherStyle.body);
+  body.position.y = 0.7;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+  // Central head above the body.
+  const head = new THREE.Mesh(witherHeadGeometry, witherStyle.head);
+  head.position.y = 1.9;
+  head.castShadow = true;
+  addWitherFace(head, 0, 0);
+  group.add(head);
+  // Two shoulder heads at the sides.
+  [-0.85, 0.85].forEach((sideX) => {
+    const sideHead = new THREE.Mesh(witherHeadGeometry, witherStyle.head);
+    sideHead.position.set(sideX, 1.15, 0);
+    sideHead.castShadow = true;
+    addWitherFace(sideHead, sideX, 0);
+    group.add(sideHead);
+  });
+  // A jagged core of obsidian shards for silhouette.
+  [-0.5, 0.5].forEach((sx) => {
+    const shard = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), witherStyle.body);
+    shard.position.set(sx, 0.4, 0.1);
+    group.add(shard);
+  });
+  group.visible = false;
+  scene.add(group);
+  return group;
+};
+
+const addWitherFace = (head: THREE.Mesh, sideX: number, z: number): void => {
+  [-0.14, 0.14].forEach((ex) => {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), witherStyle.eye);
+    eye.position.set(ex + sideX * 0.02, 0, 0.32 + z);
+    head.add(eye);
+  });
+};
+
+const syncWitherMeshes = (): void => {
+  // Remove meshes for defeated/absent bosses.
+  witherMeshes.forEach((mesh, id) => {
+    if (!withers.some((boss) => boss.id === id && !boss.defeated)) {
+      scene.remove(mesh);
+      witherMeshes.delete(id);
+    }
+  });
+  withers.forEach((boss) => {
+    if (boss.defeated) return;
+    let mesh = witherMeshes.get(boss.id);
+    if (!mesh) {
+      mesh = createWitherMesh(boss);
+      witherMeshes.set(boss.id, mesh);
+    }
+    mesh.position.set(boss.x, boss.y, boss.z);
+    mesh.rotation.y = boss.facing;
+    mesh.visible = true;
+    // Enraged bosses glow a hotter core.
+    witherStyle.body.color.set(boss.phase === "dying" ? 0x5b1a1a : 0x2b2622);
+  });
+  syncSkullMeshes();
+};
+
+const syncSkullMeshes = (): void => {
+  const live = new Map<number, boolean>();
+  withers.forEach((boss) => boss.projectiles.forEach((skull) => live.set(skull.id, true)));
+  skullMeshes.forEach((mesh, id) => { if (!live.has(id)) { scene.remove(mesh); skullMeshes.delete(id); } });
+  withers.forEach((boss) => boss.projectiles.forEach((skull) => {
+    if (skull.spent) return;
+    let mesh = skullMeshes.get(skull.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), skullStyle);
+      scene.add(mesh);
+      skullMeshes.set(skull.id, mesh);
+    }
+    mesh.position.set(skull.x, skull.y, skull.z);
+    mesh.visible = true;
+  }));
+};
+
+const clearWitherMeshes = (): void => {
+  witherMeshes.forEach((mesh) => scene.remove(mesh));
+  witherMeshes.clear();
+  skullMeshes.forEach((mesh) => scene.remove(mesh));
+  skullMeshes.clear();
+};
+
+/** Reset all Wither bosses, their minions and meshes for a new world/room. */
+const resetWithers = (): void => {
+  clearWitherMeshes();
+  witherMinionIds.clear();
+  withers = [];
+  nextWitherId = 1;
+  renderWitherState();
+  renderWitherStar();
+};
+
+/** Rebuild the minion visual-tag set so summoned skeletons render bone-white. */
+const syncWitherMinionTags = (): void => {
+  const live = new Set<number>();
+  withers.forEach((boss) => boss.minionIds.forEach((id) => live.add(id)));
+  witherMinionIds.clear();
+  live.forEach((id) => witherMinionIds.add(id));
+};
 const villagerMeshes = new Map<number, THREE.Group>();
 const villagerBodyGeometry = new THREE.BoxGeometry(0.76, 0.8, 0.54);
 const villagerHeadGeometry = new THREE.BoxGeometry(0.6, 0.56, 0.58);
@@ -544,18 +698,22 @@ const mobNames: Record<MobKind, string> = { stalker: "巡游者", brute: "巨岩
 const createMobMesh = (mob: Mob): THREE.Group => {
   const group = new THREE.Group();
   const style = mobStyles[mob.kind];
+  const isMinion = witherMinionIds.has(mob.id);
+  const bodyMaterial = isMinion ? witherStyle.minionBody : style.body;
+  const headMaterial = isMinion ? witherStyle.minionHead : style.head;
+  const eyeMaterial = isMinion ? witherStyle.eye : style.eye;
   group.scale.setScalar(style.scale);
-  const body = new THREE.Mesh(mobBodyGeometry, style.body);
+  const body = new THREE.Mesh(mobBodyGeometry, bodyMaterial);
   body.position.y = 0.42;
   body.castShadow = true;
   body.receiveShadow = true;
-  const head = new THREE.Mesh(mobHeadGeometry, style.head);
+  const head = new THREE.Mesh(mobHeadGeometry, headMaterial);
   head.position.y = 1.05;
   head.castShadow = true;
   head.receiveShadow = true;
   group.add(body, head);
   [-0.18, 0.18].forEach((x) => {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), style.eye);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.04), eyeMaterial);
     eye.position.set(x, 1.1, 0.33);
     group.add(eye);
   });
@@ -732,6 +890,8 @@ const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
 const guardianText = document.querySelector<HTMLDivElement>("#guardian-state")!;
 const raidText = document.querySelector<HTMLDivElement>("#raid-state")!;
 const biomeText = document.querySelector<HTMLDivElement>("#biome-state")!;
+const witherText = document.querySelector<HTMLDivElement>("#wither-state")!;
+const witherStarText = document.querySelector<HTMLDivElement>("#wither-star")!;
 const codex = document.querySelector<HTMLElement>("#codex")!;
 const playButton = document.querySelector<HTMLButtonElement>("#play")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -911,6 +1071,7 @@ const applyRoomSnapshot = (snapshot: WorldSnapshot): void => {
   spawnGuardians();
   raids = [];
   raidCooldown = 0;
+  resetWithers();
   // Joining a room always lands in the overworld; the nether derives from the synced seed.
   nether = new NetherWorld(world.seed);
   portalLinks = [];
@@ -930,7 +1091,7 @@ let mineHeld = false;
 let miningKey: string | undefined;
 let miningProgress = 0;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot() });
+const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot(), witherStars });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
     dirty = false;
@@ -1089,6 +1250,8 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   spawnGuardians();
   raids = [];
   raidCooldown = 0;
+  witherStars = slot.save.player.witherStars ?? 0;
+  resetWithers();
   // Restore the per-world nether sub-world + dimension if the slot carries one.
   nether = slot.save.player.nether ? NetherWorld.fromSnapshot(slot.save.player.nether) : new NetherWorld(world.seed);
   portalLinks = [];
@@ -1114,6 +1277,7 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   inventory: createInventory(),
   dimension: "overworld",
   nether: new NetherWorld(nextWorld.seed).snapshot(),
+  witherStars: 0,
 });
 
 const createNewWorld = (name: string): void => {
@@ -1214,7 +1378,7 @@ playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
   soundscape.unlock();
-  if (event.button === 0 && !attackMobAtCrosshair()) mineHeld = true;
+  if (event.button === 0 && !attackWitherAtCrosshair() && !attackMobAtCrosshair()) mineHeld = true;
   if (event.button === 2) edit(true);
 });
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -1270,6 +1434,10 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "KeyN" && !event.repeat) {
     soundscape.unlock();
     placePortal();
+  }
+  if (event.code === "KeyH" && !event.repeat) {
+    soundscape.unlock();
+    summonWitherAt();
   }
   if (event.code === "KeyM" && !event.repeat) {
     const enabled = soundscape.toggle();
@@ -1424,6 +1592,101 @@ const updateRaidsLoop = (delta: number): void => {
   renderRaidState();
 };
 
+/** True when a completed Wither ritual sits within a few blocks of the player. */
+const witherRitualNearby = (): { center: { x: number; y: number; z: number } } | undefined => {
+  const px = Math.floor(camera.position.x);
+  const py = Math.floor(camera.position.y - 1.72);
+  const pz = Math.floor(camera.position.z);
+  for (let dx = -3; dx <= 3; dx += 1) {
+    for (let dy = -3; dy <= 3; dy += 1) {
+      for (let dz = -3; dz <= 3; dz += 1) {
+        const center = { x: px + dx, y: py + dy, z: pz + dz };
+        if (isWitherStructure(world, center)) return { center };
+      }
+    }
+  }
+  return undefined;
+};
+
+/** Constructible summon: blizzard the ritual blocks and wake the Wither. */
+const summonWitherAt = (): void => {
+  if (dimension !== "overworld") { status.textContent = "凋灵只能在主世界召唤"; return; }
+  const ritual = witherRitualNearby();
+  if (!ritual) {
+    status.textContent = "未找到凋灵祭坛：请用 5 个沙子摆成 T 形、头顶放 1 个石头（头颅）";
+    return;
+  }
+  const result = summonWither(nextWitherId++, world, ritual.center, {
+    hp: 200,
+    skullCooldown: 2.0,
+    enragedSkullCooldown: 0.85,
+    summonCooldown: 6,
+  });
+  if (!result) { status.textContent = "祭坛结构不完整，无法召唤"; return; }
+  withers.push(result.boss);
+  syncRenderedChunks(true);
+  dirty = true;
+  persist();
+  status.textContent = "凋灵已苏醒！击溃它夺得下界之星";
+  soundscape.play("place");
+};
+
+/** The player may hit the Wither boss itself with the crosshair. */
+const attackWitherAtCrosshair = (): boolean => {
+  const boss = withers.find((candidate) => !candidate.defeated);
+  if (!boss) return false;
+  raycaster.setFromCamera(center, camera);
+  const bossHits = raycaster.intersectObjects([...witherMeshes.values()], true);
+  const bossHit = bossHits[0];
+  if (!bossHit) return false;
+  const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
+  if (blockHit && blockHit.distance < bossHit.distance) return false;
+  boss.health = Math.max(0, boss.health - 6);
+  soundscape.play("hit");
+  status.textContent = boss.health > 0 ? `命中凋灵 · ${boss.health}/${boss.maxHealth}` : "凋灵已倒下！";
+  return true;
+};
+
+/** Advance Wither boss(es) and grant loot exactly once on defeat. */
+const updateWitherLoop = (delta: number): void => {
+  const superseded = withers.filter((boss) => boss.defeated).length;
+  let justKilled = false;
+  for (const boss of withers) {
+    if (boss.defeated) continue;
+    const frame = updateWither(world, boss, mobs, camera.position, delta);
+    if (frame.damageToPlayer > 0) {
+      playerHealth = Math.max(0, playerHealth - frame.damageToPlayer);
+      if (playerHealth === 0) {
+        playerHealth = maxPlayerHealth;
+        camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+        verticalVelocity = 0;
+        status.textContent = "被凋灵骷髅击中，生命耗尽，已在起点重生";
+      } else {
+        status.textContent = "被凋灵骷髅击中！";
+      }
+      soundscape.play("hurt");
+      renderHealth();
+    }
+    if (frame.killed) justKilled = true;
+  }
+  // Grant loot once when a boss falls.
+  if (justKilled) {
+    const drops = witherDropBlocks();
+    drops.forEach((drop) => { inventory[drop] += 1; });
+    witherStars += 1;
+    renderHotbar();
+    renderWitherStar();
+    soundscape.play("pickup");
+    status.textContent = `凋灵已被击败！获得 ${drops.map((d) => labels[d]).join("、")} 与 ★ 下界之星`;
+    dirty = true;
+    persist();
+  }
+  if (superseded === 0) syncWitherMeshes();
+  renderWitherState();
+  syncWitherMinionTags();
+  syncMobMeshes();
+};
+
 const renderNetherState = (): void => {
   biomeText.textContent = "下界生态 · 地狱岩 / 熔岩 / 萤石";
 };
@@ -1518,10 +1781,12 @@ const frame = (now: number): void => {
     updatePlayer(delta);
     if (dimension === "overworld") {
       tryEnterPortal();
+      syncWitherMinionTags();
       updateMobs(delta);
       updateGuardiansLoop(delta);
       updateVillagersLoop(delta);
       updateRaidsLoop(delta);
+      updateWitherLoop(delta);
       renderBiomeState();
     } else {
       updateNetherEcology(delta);

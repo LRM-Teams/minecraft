@@ -17,6 +17,8 @@ export type PlayerSave = {
   inventory?: Partial<Inventory>;
   dimension?: "overworld" | "nether";
   nether?: NetherSnapshot;
+  /** Wither bosses defeated → Nether Stars earned (additive optional field). */
+  witherStars?: number;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
