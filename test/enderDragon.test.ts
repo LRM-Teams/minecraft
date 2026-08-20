@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEnderDragon, dragonCrystalHeal, updateEnderDragon } from "../src/enderDragon";
+import { createEnderDragon, dragonCrystalHeal, hitEnderDragon, updateEnderDragon } from "../src/enderDragon";
 
 const PLAYER = { x: 0, y: 12, z: 11 };
 
@@ -19,7 +19,7 @@ describe("EnderDragon boss", () => {
     dragon.x = dragon.centerX + Math.cos(0) * dragon.radius;
     dragon.z = dragon.centerZ + Math.sin(0) * dragon.radius;
     const startZ = dragon.z;
-    const result = updateEnderDragon(dragon, PLAYER, 1.0, 2026, () => 500);
+    const result = updateEnderDragon(dragon, PLAYER, 1.0, 3, () => 500);
     // After a tick the dragon chased the player far enough to enter charge range.
     expect(Math.abs(dragon.x - startX) + Math.abs(dragon.z - startZ)).toBeGreaterThan(0);
     // Eventually it enters the charge state for the dash.
@@ -27,31 +27,49 @@ describe("EnderDragon boss", () => {
     expect(result.defeated).toBe(false);
   });
 
-  it("summons endermen defenders on a cooldown", () => {
+  it("summons void-wisp defenders on a cooldown", () => {
     const dragon = createEnderDragon(2);
     dragon.summonCooldown = 0.1;
-    const result = updateEnderDragon(dragon, PLAYER, 5.0, 2026, () => 600);
+    const result = updateEnderDragon(dragon, PLAYER, 5.0, 3, () => 600);
     expect(result.summons.length).toBeGreaterThan(0);
-    // Summoned endermen are ordinary Mob entities with fresh unique ids.
     result.summons.forEach((mob) => {
-      expect(mob.kind).toBeDefined();
+      expect(mob.kind).toBe("wisp");
       expect(mob.hp).toBeGreaterThan(0);
     });
   });
 
-  it("heals from an intact end crystal while it survives", () => {
+  it("heals from intact crystals and stops when every crystal is gone", () => {
     const dragon = createEnderDragon(3);
-    dragon.hp = 120;
+    dragon.hp = 40;
     dragon.lastHeal = 0;
-    const healed = dragonCrystalHeal(dragon, 2026);
-    expect(healed).toBeGreaterThan(0);
-    expect(dragon.lastHeal).toBe(healed);
+    expect(dragonCrystalHeal(dragon, 2)).toBeGreaterThan(0);
+    expect(dragon.lastHeal).toBeGreaterThan(0);
+    const before = dragon.hp;
+    dragon.lastHeal = 0;
+    expect(dragonCrystalHeal(dragon, 0)).toBe(0);
+    expect(dragon.hp).toBe(before);
+    expect(dragon.lastHeal).toBe(0);
   });
 
-  it("defeats once its health is depleted and reveals its loot", () => {
+  it("applies charge damage once per charge, not every frame", () => {
+    const dragon = createEnderDragon(5, { chargeDamage: 2 });
+    dragon.state = "charging";
+    dragon.timer = 1;
+    dragon.chargeHitLanded = false;
+    dragon.x = PLAYER.x;
+    dragon.z = PLAYER.z;
+    const first = updateEnderDragon(dragon, PLAYER, 0.05, 0, () => 1);
+    const second = updateEnderDragon(dragon, PLAYER, 0.05, 0, () => 2);
+    expect(first.damageToPlayer).toBe(2);
+    expect(second.damageToPlayer).toBe(0);
+  });
+
+  it("takes player hits and defeats once its health is depleted", () => {
     const dragon = createEnderDragon(4);
+    expect(hitEnderDragon(dragon, 40)).toBe(true);
+    expect(dragon.hp).toBe(dragon.maxHp - 40);
     dragon.hp = 0;
-    const result = updateEnderDragon(dragon, PLAYER, 0.1, 2026, () => 700);
+    const result = updateEnderDragon(dragon, PLAYER, 0.1, 0, () => 700);
     expect(result.defeated).toBe(true);
     expect(dragon.dead).toBe(true);
     expect(dragon.loot).toContain("diamond_ore");

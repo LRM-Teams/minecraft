@@ -48,12 +48,15 @@ describe("EndWorld", () => {
   });
 
   it("reports deterministic crystal pillar positions for boss healing", () => {
+    const world = new EndWorld(2026, 48);
     const a = crystalPillars(2026);
     const b = crystalPillars(2026);
     expect(a).toEqual(b);
+    expect(world.crystalCount()).toBe(a.length);
     a.forEach((p) => {
       // Pillars orbit away from the central platform (not sitting at the origin).
       expect(Math.abs(p.x) > 5 || Math.abs(p.z) > 5).toBe(true);
+      expect(world.get(p.x, p.y, p.z)).toBe("end_crystal");
     });
   });
 });

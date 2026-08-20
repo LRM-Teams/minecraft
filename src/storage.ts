@@ -19,6 +19,8 @@ export type PlayerSave = {
   dimension?: "overworld" | "nether" | "end";
   nether?: NetherSnapshot;
   end?: EndSnapshot;
+  /** Whether the End boss has been defeated (gates the exit portal). */
+  endCleared?: boolean;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };

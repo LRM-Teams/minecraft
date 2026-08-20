@@ -1,5 +1,4 @@
-import { createMob, type Mob, type MobKind } from "./entities";
-import { crystalPillars } from "./end";
+import { createMob, type Mob } from "./entities";
 
 /**
  * Phase-3 「末影龙 BOSS」 — the End's boss.
@@ -7,7 +6,7 @@ import { crystalPillars } from "./end";
  * A dedicated boss entity, registered independently of the grounded `Mob`
  * model so the existing `entities.ts` Mob interface stays untouched. The dragon
  * flies a looping circuit over the End arena, dashes (charges) at the player,
- * periodically summons endermen to defend itself, and heals while an end
+ * periodically summons void wisps to defend itself, and heals while an end
  * crystal survives. Defeating it drops unique loot and marks the End complete.
  *
  * Pure TypeScript: no THREE, no render state, no I/O. All deterministic.
@@ -26,9 +25,9 @@ export interface EnderDragon {
   state: DragonState;
   /** Seconds until the next behaviour decision (charge / summon / heal check). */
   timer: number;
-  /** Secs the dragon is recovering / invulnerable after a charge. */
+  /** Secs the dragon is recovering after a charge. */
   recoverRemaining: number;
-  /** Secs between attempts to summon endermen. */
+  /** Secs between attempts to summon defenders. */
   summonCooldown: number;
   /** Tracks whether the healed-from-crystal happened this tick (for tests). */
   lastHeal: number;
@@ -41,21 +40,25 @@ export interface EnderDragon {
   angle: number;
   /** Vertical orbit amplitude / base altitude. */
   altitude: number;
-  /** Player damage from a successful charge. */
+  /** Player damage from a successful charge (applied once per charge). */
   readonly chargeDamage: number;
   readonly chargeSpeed: number;
   readonly flightSpeed: number;
   chargeCooldownRemaining: number;
+  /** Whether this charge already landed a hit on the player. */
+  chargeHitLanded: boolean;
   dead: boolean;
   /** Unique loot parceled out when the boss is defeated. */
   loot: string[];
 }
 
 export const DRAGON_LOOT = ["diamond_ore", "gold_ore", "glass"] as const;
+/** Damage dealt to the dragon per player strike. */
+export const DRAGON_HIT_DAMAGE = 8;
 
 export interface DragonFrameResult {
   damageToPlayer: number;
-  /** Endermen the dragon spawned this tick (already grounded-ready Mobs). */
+  /** Defenders the dragon spawned this tick (already grounded-ready Mobs). */
   summons: Mob[];
   /** Whether the dragon was defeated this tick (dropped its loot). */
   defeated: boolean;
@@ -67,6 +70,7 @@ interface DragonOptions {
   chargeDamage?: number;
   radius?: number;
   altitude?: number;
+  maxHp?: number;
 }
 
 const DEFAULTS: Required<DragonOptions> = {
@@ -75,10 +79,11 @@ const DEFAULTS: Required<DragonOptions> = {
   chargeDamage: 2,
   radius: 10,
   altitude: 14,
+  maxHp: 80,
 };
 
 /**
- * Build a fresh Ender Dragon circling its arena. Ids for summoned endermen are
+ * Build a fresh Ender Dragon circling its arena. Ids for summoned defenders are
  * drawn from `nextMobId` so they stay unique next to the overworld's mobs.
  */
 export function createEnderDragon(id: number, options?: DragonOptions): EnderDragon {
@@ -88,8 +93,8 @@ export function createEnderDragon(id: number, options?: DragonOptions): EnderDra
     x: 0,
     y: o.altitude,
     z: o.radius,
-    hp: 200,
-    maxHp: 200,
+    hp: o.maxHp,
+    maxHp: o.maxHp,
     state: "circling",
     timer: 1.5,
     recoverRemaining: 0,
@@ -104,6 +109,7 @@ export function createEnderDragon(id: number, options?: DragonOptions): EnderDra
     chargeSpeed: o.chargeSpeed,
     flightSpeed: o.flightSpeed,
     chargeCooldownRemaining: 0,
+    chargeHitLanded: false,
     dead: false,
     loot: [...DRAGON_LOOT],
   };
@@ -113,13 +119,11 @@ const dist = (ax: number, az: number, bx: number, bz: number): number => Math.hy
 const range = (min: number, max: number, rnd: number): number => min + rnd * (max - min);
 
 /**
- * A dragon heals itself when any end crystal on a surviving pillar is intact.
+ * A dragon heals itself when at least one end crystal still survives.
  * Returns the amount healed this tick (0 when no crystal remains).
  */
-export function dragonCrystalHeal(dragon: EnderDragon, seed: number, healAmount = 6): number {
-  const pillars = crystalPillars(seed);
-  if (!pillars.length) return 0;
-  // A pillared island counts as "alive" for the encounter; presence alone heals.
+export function dragonCrystalHeal(dragon: EnderDragon, crystalCount: number, healAmount = 6): number {
+  if (crystalCount <= 0) return 0;
   const healed = Math.min(healAmount, dragon.maxHp - dragon.hp);
   if (healed > 0) {
     dragon.hp += healed;
@@ -128,16 +132,25 @@ export function dragonCrystalHeal(dragon: EnderDragon, seed: number, healAmount 
   return healed;
 }
 
+/** Apply a player strike to the dragon. Returns true when the hit landed. */
+export function hitEnderDragon(dragon: EnderDragon, amount = DRAGON_HIT_DAMAGE): boolean {
+  if (dragon.dead || dragon.hp <= 0) return false;
+  // Brief recovery window after a charge — dragon is airborne and hard to punish.
+  if (dragon.state === "recovering" && dragon.recoverRemaining > 0.4) return false;
+  dragon.hp = Math.max(0, dragon.hp - amount);
+  return true;
+}
+
 /**
- * Advance the dragon boss by `delta` seconds. `worldFree` lets the caller tell
- * us whether a summoned enderman may occupy a given (x,z) cell (used to place
- * them on real ground). Returns live per-tick events for the caller to apply.
+ * Advance the dragon boss by `delta` seconds. `crystalCount` is how many end
+ * crystals still remain in the arena (heal gate). Returns live per-tick events
+ * for the caller to apply.
  */
 export function updateEnderDragon(
   dragon: EnderDragon,
   player: { x: number; y: number; z: number },
   delta: number,
-  seed: number,
+  crystalCount: number,
   nextMobId: () => number,
 ): DragonFrameResult {
   const result: DragonFrameResult = { damageToPlayer: 0, summons: [], defeated: false };
@@ -162,17 +175,18 @@ export function updateEnderDragon(
       const bob = Math.sin(dragon.angle * 2.4) * 2;
       dragon.x = px;
       dragon.z = pz;
-      dragon.y = dragon.altitude + bob/1.6;
+      dragon.y = dragon.altitude + bob / 1.6;
       dragon.timer -= delta;
 
       if (dragon.chargeCooldownRemaining <= 0 && dist(player.x, player.z, dragon.x, dragon.z) < 9 && dragon.timer <= 0) {
         dragon.state = "charging";
         dragon.timer = 1.1; // charge duration
+        dragon.chargeHitLanded = false;
       } else if (dragon.timer <= 0) {
         dragon.timer = 1.6 + range(0, 1.4, hashOf(dragon.id, dragon.x, dragon.z));
       }
 
-      // Summon endermen defenders on a cooldown.
+      // Summon void-wisp defenders on a cooldown (MobKind has no enderman).
       if (dragon.summonCooldown <= 0) {
         const count = 1 + Math.floor(hashOf(dragon.id + 7, dragon.x, dragon.z) * 2);
         for (let n = 0; n < count; n += 1) {
@@ -183,8 +197,8 @@ export function updateEnderDragon(
           result.summons.push(createMob(nextMobId(), mx, mz, { kind: "wisp", hp: 10, damage: 1 }));
         }
         dragon.summonCooldown = 5 + range(0, 2.5, hashOf(dragon.id, dragon.x, dragon.z * 3));
-        // Every summoning tick, an intact crystal channels a heal to the boss.
-        dragonCrystalHeal(dragon, seed);
+        // Every summoning tick, surviving crystals channel a heal to the boss.
+        dragonCrystalHeal(dragon, crystalCount);
       }
       break;
     }
@@ -198,8 +212,11 @@ export function updateEnderDragon(
       dragon.z += (dz / d) * dragon.chargeSpeed * delta;
       dragon.y = Math.max(3, dragon.y - delta * 12);
       dragon.timer -= delta;
-      // Contact with the player during a charge deals the boss damage.
-      if (d < 1.6) result.damageToPlayer += dragon.chargeDamage;
+      // Contact during a charge deals damage once — not every frame.
+      if (d < 1.6 && !dragon.chargeHitLanded) {
+        result.damageToPlayer += dragon.chargeDamage;
+        dragon.chargeHitLanded = true;
+      }
       if (dragon.timer <= 0) {
         dragon.state = "recovering";
         dragon.recoverRemaining = 1.4;

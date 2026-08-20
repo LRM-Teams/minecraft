@@ -24,13 +24,12 @@ import {
   type PortalSide,
 } from "./nether";
 import {
-  crystalPillars,
   END_BLOCKS,
   EndWorld,
   endSpawn,
   type EndBlockId,
 } from "./end";
-import { createEnderDragon, updateEnderDragon, type EnderDragon } from "./enderDragon";
+import { createEnderDragon, hitEnderDragon, updateEnderDragon } from "./enderDragon";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -196,6 +195,7 @@ const endColors: Record<EndBlockId, number> = {
   obsidian: 0x2b2333,
   end_rock: 0xb7a88f,
   end_portal: 0x37e0c0,
+  end_crystal: 0xff7ad9,
 };
 
 /** Block types whose per-instance colors may be recoloured by biome variant. */
@@ -463,8 +463,8 @@ class NetherRenderer {
 const endMaterial = (type: EndBlockId): THREE.MeshLambertMaterial => new THREE.MeshLambertMaterial({
   color: 0xffffff,
   map: blockTextureEnd(type),
-  transparent: type === "end_portal",
-  opacity: type === "end_portal" ? 0.85 : 1,
+  transparent: type === "end_portal" || type === "end_crystal",
+  opacity: type === "end_portal" ? 0.85 : type === "end_crystal" ? 0.92 : 1,
   // End meshes never set per-instance colours, so vertexColors stays off.
   vertexColors: false,
 });
@@ -494,6 +494,12 @@ const blockTextureEnd = (type: EndBlockId): THREE.CanvasTexture => {
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
       if ((x + y) % 4 === 0 || noise(x, y) > 0.7) paint(new THREE.Color(0x37e0c0), x, y, 2, 2);
     }
+  } else if (type === "end_crystal") {
+    paint(new THREE.Color(0x2a1038));
+    for (let y = 1; y < 15; y += 2) for (let x = 1; x < 15; x += 2) {
+      if (noise(x, y) > 0.35) paint(base.clone().multiplyScalar(0.85 + noise(x + 2, y) * 0.4), x, y, 2, 2);
+    }
+    paint(new THREE.Color(0xffffff), 6, 6, 4, 4);
   } else if (type === "obsidian") {
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
@@ -537,7 +543,7 @@ class EndRenderer {
       const positions = this.positions.get(type) ?? [];
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, endMaterialFor(type), positions.length);
-      mesh.castShadow = type !== "end_portal";
+      mesh.castShadow = type !== "end_portal" && type !== "end_crystal";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       positions.forEach((position, index) => {
@@ -547,6 +553,7 @@ class EndRenderer {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.userData.positions = positions;
       mesh.userData.end = true;
+      mesh.userData.endBlock = type;
       this.meshes.set(type, mesh);
       scene.add(mesh);
     });
@@ -577,7 +584,7 @@ let endWorld = saved?.player.end ? EndWorld.fromSnapshot(saved.player.end) : new
 const endChunks = new EndRenderer(); // end sub-world terrain
 let endDragon = createEnderDragon(9001); // boss lives only inside the End
 let endDragonGroup: THREE.Group | undefined;
-let endCleared = false;
+let endCleared = saved?.player.endCleared ?? false;
 
 const currentTopY = (x: number, z: number): number => {
   if (dimension === "nether") return nether.topY(x, z);
@@ -1089,7 +1096,7 @@ let mineHeld = false;
 let miningKey: string | undefined;
 let miningProgress = 0;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot(), end: endWorld.snapshot() });
+const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot(), end: endWorld.snapshot(), endCleared });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
     dirty = false;
@@ -1102,7 +1109,10 @@ const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textConten
 
 const findTarget = (): void => {
   raycaster.setFromCamera(center, camera);
-  const hit = raycaster.intersectObjects(blocks.objects(), false)[0];
+  const objects = dimension === "end" ? endChunks.objects()
+    : dimension === "nether" ? netherChunks.objects()
+    : blocks.objects();
+  const hit = raycaster.intersectObjects(objects, false)[0];
   if (!hit || hit.instanceId === undefined || !hit.face) {
     target = undefined;
     selection.visible = false;
@@ -1119,11 +1129,34 @@ const findTarget = (): void => {
 /** A mob is hittable only when it is the first object under the crosshair. */
 const attackMobAtCrosshair = (): boolean => {
   raycaster.setFromCamera(center, camera);
-  const entities = raycaster.intersectObjects([...mobMeshes.values(), ...villagerMeshes.values()], true);
+  const entityRoots = [...mobMeshes.values(), ...villagerMeshes.values()];
+  if (dimension === "end" && endDragonGroup && !endDragon.dead) entityRoots.push(endDragonGroup);
+  const entities = raycaster.intersectObjects(entityRoots, true);
   const entityHit = entities[0];
   if (!entityHit) return false;
-  const blockHit = raycaster.intersectObjects(blocks.objects(), false)[0];
+  const blockObjects = dimension === "end" ? endChunks.objects()
+    : dimension === "nether" ? netherChunks.objects()
+    : blocks.objects();
+  const blockHit = raycaster.intersectObjects(blockObjects, false)[0];
   if (blockHit && blockHit.distance < entityHit.distance) return false;
+
+  if (dimension === "end" && endDragonGroup && !endDragon.dead) {
+    let cursor: THREE.Object3D | null = entityHit.object;
+    while (cursor) {
+      if (cursor === endDragonGroup || cursor.userData.dragon) {
+        if (!hitEnderDragon(endDragon)) {
+          status.textContent = "末影龙正在恢复，稍后再打";
+          return true;
+        }
+        soundscape.play("hit");
+        status.textContent = endDragon.hp > 0
+          ? `命中末影龙 · ${endDragon.hp}/${endDragon.maxHp}`
+          : "末影龙已倒下";
+        return true;
+      }
+      cursor = cursor.parent;
+    }
+  }
 
   const mobId = entityHit.object.userData.mobId as number | undefined;
   const villagerId = entityHit.object.userData.villagerId as number | undefined;
@@ -1167,6 +1200,19 @@ const intersectsPlayer = (position: BlockPosition): boolean => {
 
 const edit = (place: boolean): void => {
   if (!target) return;
+  if (dimension === "end") {
+    // End edits are local to the End sub-world (mine crystals / terrain only).
+    if (place) { status.textContent = "末地中无法放置主世界方块"; return; }
+    const removed = endWorld.remove(target.position);
+    if (removed) {
+      soundscape.play("break");
+      if (removed === "end_crystal") status.textContent = `摧毁末影水晶 · 剩余 ${endWorld.crystalCount()}`;
+      syncRenderedChunks(true);
+      dirty = true;
+      persist();
+    }
+    return;
+  }
   if (!place) {
     const removed = world.remove(target.position);
     if (removed) {
@@ -1200,6 +1246,23 @@ const updateMining = (delta: number): void => {
   if (!mineHeld || !target) { stopMining(); return; }
   const { x, y, z } = target.position;
   const key = `${x},${y},${z}`;
+  if (dimension === "end") {
+    const block = endWorld.get(x, y, z);
+    // Crystals and soft end terrain are diggable; portal/obsidian stay fixed.
+    if (!block || block === "end_portal" || block === "obsidian") { stopMining(); return; }
+    if (key !== miningKey) {
+      miningKey = key;
+      miningProgress = 0;
+    }
+    const duration = block === "end_crystal" ? 0.55 : 0.9;
+    miningProgress = Math.min(1, miningProgress + delta / duration);
+    status.textContent = `挖掘 ${block} · ${Math.round(miningProgress * 100)}%`;
+    if (miningProgress >= 1) {
+      edit(false);
+      stopMining();
+    }
+    return;
+  }
   const block = world.get(x, y, z);
   if (!block || !isMineable(block)) { stopMining(); return; }
   if (key !== miningKey) {
@@ -1252,7 +1315,11 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   nether = slot.save.player.nether ? NetherWorld.fromSnapshot(slot.save.player.nether) : new NetherWorld(world.seed);
   endWorld = slot.save.player.end ? EndWorld.fromSnapshot(slot.save.player.end) : new EndWorld(world.seed);
   endDragon = createEnderDragon(9001);
-  endCleared = false;
+  endCleared = slot.save.player.endCleared ?? false;
+  if (endCleared) {
+    endDragon.hp = 0;
+    endDragon.dead = true;
+  }
   portalLinks = [];
   dimension = slot.save.player.dimension ?? "overworld";
   renderRaidState();
@@ -1277,6 +1344,7 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   dimension: "overworld",
   nether: new NetherWorld(nextWorld.seed).snapshot(),
   end: new EndWorld(nextWorld.seed).snapshot(),
+  endCleared: false,
 });
 
 const createNewWorld = (name: string): void => {
@@ -1669,19 +1737,39 @@ const spawnDragonMesh = (): void => {
 /** End-only ecology each frame: the dragon patrols, fights, and a healed exit awaits. */
 let nextMobIdEnd = 10000;
 const updateEndEcology = (delta: number): void => {
-  // Step out of the End by touching the central exit portal.
-  if (endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)) === "end_portal"
-      || endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y) - 1, Math.round(camera.position.z)) === "end_portal") {
-    exitEnd();
-    return;
+  // Step out of the End by touching the central exit portal — only after the boss falls.
+  const onPortal = endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)) === "end_portal"
+      || endWorld.get(Math.round(camera.position.x), Math.round(camera.position.y) - 1, Math.round(camera.position.z)) === "end_portal";
+  if (onPortal) {
+    if (endCleared || endDragon.dead) {
+      exitEnd();
+      return;
+    }
+    status.textContent = "击败末影龙后，中央传送门才会开启返回";
   }
   if (endDragon.dead || endCleared) {
     if (endCleared) { biomeText.textContent = "末影龙已击败 · 返回传送门已点亮"; }
+    if (endDragonGroup) endDragonGroup.visible = false;
     return;
   }
-  const result = updateEnderDragon(endDragon, camera.position, delta, endWorld.seed, () => nextMobIdEnd++);
+  const result = updateEnderDragon(endDragon, camera.position, delta, endWorld.crystalCount(), () => nextMobIdEnd++);
   result.summons.forEach((m) => { if (!mobs.some((exist) => exist.id === m.id)) mobs.push(m); });
-  mobs.length && syncMobMeshes();
+  if (result.summons.length) syncMobMeshes();
+  if (result.damageToPlayer > 0) {
+    playerHealth = Math.max(0, playerHealth - result.damageToPlayer);
+    if (playerHealth === 0) {
+      playerHealth = maxPlayerHealth;
+      const s = endSpawn();
+      camera.position.set(s.x, endWorld.topY(s.x, s.z) + 1.72, s.z);
+      verticalVelocity = 0;
+      status.textContent = "生命耗尽，已在末地平台重生";
+      soundscape.play("respawn");
+    } else {
+      status.textContent = `末影龙冲撞 · 受到 ${result.damageToPlayer} 点伤害`;
+      soundscape.play("hurt");
+    }
+    renderHealth();
+  }
   if (result.defeated) {
     endCleared = true;
     const loot = endDragon.loot;
@@ -1689,7 +1777,9 @@ const updateEndEcology = (delta: number): void => {
       const typed = drop as keyof typeof inventory;
       if (typed in inventory && inventory[typed] !== undefined) inventory[typed] += 1;
     });
-    status.textContent = "末影龙已被你击败！";
+    status.textContent = "末影龙已被你击败！中央传送门已开启";
+    biomeText.textContent = "末影龙已击败 · 返回传送门已点亮";
+    if (endDragonGroup) endDragonGroup.visible = false;
     renderHotbar();
     renderHealth();
     persist();
@@ -1708,7 +1798,12 @@ const updateEndEcology = (delta: number): void => {
 
 const enterEnd = (): void => {
   dimension = "end";
-  endDragon = endDragon.dead ? endDragon : createEnderDragon(9001);
+  if (endCleared) {
+    endDragon.hp = 0;
+    endDragon.dead = true;
+  } else {
+    endDragon = createEnderDragon(9001);
+  }
   const s = endSpawn();
   const groundY = endWorld.topY(s.x, s.z) + 1.72;
   camera.position.set(s.x, Math.max(groundY, s.y + 0.5), s.z);
@@ -1718,7 +1813,9 @@ const enterEnd = (): void => {
   syncDimensionState();
   dirty = true;
   persist();
-  status.textContent = "已进入末地 · 击败末影龙以开启返回";
+  status.textContent = endCleared
+    ? "已进入末地 · 末影龙已被击败，踏上中央传送门可返回"
+    : "已进入末地 · 摧毁水晶并击败末影龙以开启返回";
   soundscape.play("place");
 };
 
