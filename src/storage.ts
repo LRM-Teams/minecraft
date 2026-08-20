@@ -21,6 +21,8 @@ export type PlayerSave = {
   end?: EndSnapshot;
   /** Whether the End boss has been defeated (gates the exit portal). */
   endCleared?: boolean;
+  /** Wither bosses defeated → Nether Stars earned (additive optional field). */
+  witherStars?: number;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
