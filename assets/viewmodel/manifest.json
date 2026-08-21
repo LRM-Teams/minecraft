@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "issue": "LRM-1605",
+  "license": "cc0-original-procedural",
+  "cell": 16,
+  "crack_stages": 10,
+  "textures": {
+    "hand_skin": "hand_skin.png",
+    "sleeve": "sleeve.png",
+    "destroy_stages": [
+      "destroy_stage_0.png",
+      "destroy_stage_1.png",
+      "destroy_stage_2.png",
+      "destroy_stage_3.png",
+      "destroy_stage_4.png",
+      "destroy_stage_5.png",
+      "destroy_stage_6.png",
+      "destroy_stage_7.png",
+      "destroy_stage_8.png",
+      "destroy_stage_9.png"
+    ]
+  },
+  "viewmodel": {
+    "camera_anchor": {
+      "x": 0.28,
+      "y": -0.32,
+      "z": -0.42
+    },
+    "arm_box": {
+      "size": [
+        0.12,
+        0.28,
+        0.12
+      ],
+      "local": [
+        0,
+        -0.06,
+        0.02
+      ]
+    },
+    "hand_box": {
+      "size": [
+        0.11,
+        0.11,
+        0.14
+      ],
+      "local": [
+        0,
+        -0.24,
+        0.04
+      ]
+    },
+    "held_anchor": {
+      "local": [
+        0.02,
+        -0.28,
+        -0.02
+      ]
+    },
+    "materials": {
+      "arm": {
+        "map": "sleeve.png",
+        "fallback_color": "#3d6ea5"
+      },
+      "hand": {
+        "map": "hand_skin.png",
+        "fallback_color": "#d4a574"
+      }
+    }
+  },
+  "held_poses": {
+    "empty": {
+      "note": "仅手臂+手可见；无 held mesh"
+    },
+    "block": {
+      "size": 0.22,
+      "local": [
+        0.06,
+        0.02,
+        -0.08
+      ],
+      "rotation_euler": [
+        0.25,
+        0.6,
+        0.1
+      ],
+      "note": "用世界六面贴图或 blockColor；热键切换即时更新"
+    },
+    "tool": {
+      "local": [
+        0.04,
+        0.02,
+        -0.06
+      ],
+      "rotation_euler": [
+        0.9,
+        0.35,
+        -0.4
+      ],
+      "note": "镐/斧/铲：木柄+金属头；装备工具优先于热键方块"
+    },
+    "sword": {
+      "local": [
+        0.04,
+        0.02,
+        -0.06
+      ],
+      "rotation_euler": [
+        0.9,
+        0.35,
+        -0.4
+      ],
+      "note": "剑：更长刃、更窄截面；同 tool 锚点"
+    }
+  },
+  "animation": {
+    "idle_bob": {
+      "amp": 0.008,
+      "freq_hz_approx": 0.64
+    },
+    "lmb_hold_swing": {
+      "phase_speed": 9.0,
+      "root_rot": [
+        0.55,
+        0.15,
+        0.35
+      ],
+      "arm_rot_x": 0.85,
+      "note": "sin 脉冲循环；与挖掘时长/工具速度由引擎进度驱动，设计侧只定姿态幅度"
+    },
+    "lmb_tap_release": {
+      "phase_speed": 14.0,
+      "note": "松手后补完半周期再回 idle"
+    },
+    "crack_sync": {
+      "stages": 10,
+      "map": "progress[0,1) → floor(p*10)；p>=1 → stage 9",
+      "overlay": "1.02 立方体叠在目标方块中心；transparent + polygonOffset"
+    }
+  }
+}
