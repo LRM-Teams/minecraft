@@ -17,8 +17,8 @@ import type { BlockType } from "./world";
 
 export const BIOME_CELL = 24;
 
-/** Identifiable biomes. At least 3 are required by the acceptance criteria. */
-export const BIOMES = ["plains", "forest", "desert", "mountains", "pale_garden", "sakura"] as const;
+/** Identifiable biomes. Plains / desert / ocean are required by the rewrite AC. */
+export const BIOMES = ["plains", "forest", "desert", "ocean", "mountains", "pale_garden", "sakura"] as const;
 export type BiomeId = (typeof BIOMES)[number];
 
 /**
@@ -76,6 +76,12 @@ const PROFILES: Record<BiomeId, BiomeProfile> = {
     surface: "sand", subsurface: "sand", underground: "stone", seaLevel: 1,
     treeThreshold: 1, aquatic: false, variant: "default",
   },
+  // 海洋 Ocean: deep flooded basins with sand floors — distinct from shallow plains ponds.
+  ocean: {
+    id: "ocean", name: "海洋", baseHeight: 1, amplitude: 0.5, roughness: 0.45,
+    surface: "sand", subsurface: "sand", underground: "stone", seaLevel: 7,
+    treeThreshold: 1, aquatic: true, variant: "default",
+  },
   mountains: {
     id: "mountains", name: "山地", baseHeight: 12, amplitude: 3.2, roughness: 1.8,
     surface: "grass", subsurface: "stone", underground: "stone", seaLevel: 3,
@@ -114,13 +120,14 @@ const biomeForCell = (cx: number, cz: number, seed: number): BiomeId => {
   // several distinct, bordered regions per world while staying reproducible.
   const heat = hash(cx, cz, seed * 101 + 7);
   const moisture = hash(cx * 2 + 13, cz * 3 - 5, seed * 33 + 1);
-  if (moisture > 0.7) return "forest";        // very wet → lush
-  if (moisture > 0.52) {
+  if (moisture > 0.78) return "ocean";        // deepest wet → open ocean
+  if (moisture > 0.62) return "forest";       // wet → lush forest
+  if (moisture > 0.48) {
     // Damp but not flooded: cool → pale/eerie garden, mild → cherry blossom.
     return heat < 0.3 ? "pale_garden" : "sakura";
   }
-  if (heat > 0.6) return "desert";            // hot & dry → sand
-  if (heat > 0.3 && moisture < 0.42) return "mountains"; // dry highlands
+  if (heat > 0.62 && moisture < 0.4) return "desert"; // hot & dry → sand
+  if (heat > 0.32 && moisture < 0.38) return "mountains"; // dry highlands
   return "plains";
 };
 

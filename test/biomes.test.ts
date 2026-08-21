@@ -74,19 +74,23 @@ describe("biomes", () => {
     expect(tree).toBeGreaterThanOrEqual(0);
   });
 
-  it("exposes the new Phase-3 biomes (pale_garden, sakura) across seeds", () => {
+  it("exposes the Phase-3 biomes (pale_garden, sakura) and ocean across seeds", () => {
     let pale = false;
     let sakura = false;
-    for (let seed = 200; seed <= 600; seed += 7) {
+    let ocean = false;
+    for (let seed = 200; seed <= 800; seed += 7) {
       const found = biomesForSeed(seed);
       if (found.has("pale_garden")) pale = true;
       if (found.has("sakura")) sakura = true;
-      if (pale && sakura) break;
+      if (found.has("ocean")) ocean = true;
+      if (pale && sakura && ocean) break;
     }
     expect(BIOMES).toContain("pale_garden");
     expect(BIOMES).toContain("sakura");
+    expect(BIOMES).toContain("ocean");
     expect(pale).toBe(true);
     expect(sakura).toBe(true);
+    expect(ocean).toBe(true);
   });
 
   it("assigns a distinct variant and deterministic flora to the new biomes", () => {
