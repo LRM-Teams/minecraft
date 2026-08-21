@@ -23,6 +23,7 @@ const DURATIONS: Record<BlockType, number> = {
   furnace: 0.95,
   enchanting_table: 1.2,
   bookshelf: 0.55,
+  brewing_stand: 0.7,
   torch: 0.05,
   wool: 0.35,
   bed: 0.4,
@@ -40,6 +41,7 @@ const PICKAXE_BLOCKS = new Set<BlockType>([
   "obsidian",
   "furnace",
   "enchanting_table",
+  "brewing_stand",
 ]);
 const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "bookshelf", "leaves", "bed"]);
 const SHOVEL_BLOCKS = new Set<BlockType>(["grass", "dirt", "sand"]);

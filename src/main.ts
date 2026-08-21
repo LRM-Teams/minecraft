@@ -67,25 +67,40 @@ import {
   type Enchantment,
   type EnchantedItem,
 } from "./enchanting";
+import {
+  createEffects,
+  drinkPotion,
+  formatEffectsHud,
+  pickPotionToDrink,
+  snapshotBrewing,
+  tickEffects,
+  type ActiveEffect,
+} from "./brewing";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
 import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
 import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
 import {
+  activeBrewingStand,
   activeFurnace,
+  closeBrew,
   closeCraft,
   closeEnchant,
   closeFurnace,
   createStations,
+  handleBrewClick,
   handleCraftClick,
   handleEnchantClick,
   handleFurnaceClick,
+  openBrewAt,
   openEnchantAt,
   openFurnaceAt,
   openInventoryCraft,
   openTableCraft,
+  renderBrewPanelHtml,
   renderCraftPanelHtml,
   renderEnchantPanelHtml,
   renderFurnacePanelHtml,
+  tickAllBrewingStands,
   tickAllFurnaces,
 } from "./stations";
 import {
@@ -120,6 +135,7 @@ app.innerHTML = `
     <div id="hunger"></div>
     <div id="armor"></div>
     <div id="xp"></div>
+    <div id="effects"></div>
     <div id="audio-state"></div>
     <div id="network-state"></div>
     <div id="village-state"></div>
@@ -130,12 +146,13 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉附魔台/睡床 · E 合成 · R 工具 · T 进食 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉附魔台酿造台/睡床 · E 合成 · R 工具 · T 进食喝药 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
     <div id="furnace-panel" class="station-panel hidden"></div>
     <div id="enchant-panel" class="station-panel hidden"></div>
+    <div id="brew-panel" class="station-panel hidden"></div>
     <aside id="codex" class="hidden">
       <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
       <p>对标原版：背包 <kbd>E</kbd> 开 2×2 合成；放置工作台后右键开 3×3；熔炉烧炼矿石/沙子。</p>
@@ -145,10 +162,11 @@ app.innerHTML = `
       <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
       <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
-      <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食</div>
+      <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食/喝药</div>
       <div class="recipe">护甲：皮革/铁锭工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
       <div class="recipe">附魔：甘蔗×3→纸；纸×3+皮革→书；书+钻石×2+黑曜石×4→附魔台；书架环绕增强；青金石+经验附魔锋利/保护/效率</div>
-      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/床/村民交互。羊毛可在村庄屋内取得。</p>
+      <div class="recipe">酿造：烈焰棒+石头×3→酿造台；玻璃×3→玻璃瓶；甘蔗→糖；烈焰棒→烈焰粉×2；金锭+苹果→闪烁西瓜；水瓶+下界疣→粗制；再加西瓜/糖/蜘蛛眼→治疗/迅捷/剧毒</div>
+      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/酿造台/床/村民交互。幽火掉烈焰棒与下界疣；潜行者掉蜘蛛眼。</p>
     </aside>
   </div>
   <div id="start-screen">
@@ -268,12 +286,13 @@ const colors: Record<BlockType, number> = {
   furnace: 0x6a6e72,
   enchanting_table: 0x5a2a6e,
   bookshelf: 0x8b5a2b,
+  brewing_stand: 0x6a5a48,
   torch: 0xffc15a,
   wool: 0xf0ebe3,
   bed: 0xc43c3c,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", torch: "火把", wool: "羊毛", bed: "床",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -1225,11 +1244,15 @@ const stations = createStations();
 const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
 const enchantPanel = document.querySelector<HTMLDivElement>("#enchant-panel")!;
+const brewPanel = document.querySelector<HTMLDivElement>("#brew-panel")!;
+const effectsText = document.querySelector<HTMLDivElement>("#effects")!;
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
 let hunger: HungerState = createHungerState(saved?.player.hunger);
 let armor: ArmorState = createArmorState(saved?.player.armor);
 let enchantState = createEnchantSaveState(saved?.player.enchanting);
+let potionEffects: ActiveEffect[] = createEffects(saved?.player.brewing);
+const poisonAcc = { value: 0 };
 const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
@@ -1337,6 +1360,7 @@ const refreshStationsUi = (): void => {
   craftPanel.classList.toggle("hidden", !stations.craftOpen);
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
   enchantPanel.classList.toggle("hidden", !stations.enchantOpen);
+  brewPanel.classList.toggle("hidden", !stations.brewOpen);
   if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor);
   if (stations.furnaceOpen) {
     const furnace = activeFurnace(stations);
@@ -1345,9 +1369,14 @@ const refreshStationsUi = (): void => {
   if (stations.enchantOpen) {
     enchantPanel.innerHTML = renderEnchantPanelHtml(stations, inventory, enchantState.experience, enchantState.gear);
   }
+  if (stations.brewOpen) {
+    const stand = activeBrewingStand(stations);
+    if (stand) brewPanel.innerHTML = renderBrewPanelHtml(stand, inventory);
+  }
 };
 
-const anyStationOpen = (): boolean => stations.craftOpen || stations.furnaceOpen || stations.enchantOpen;
+const anyStationOpen = (): boolean =>
+  stations.craftOpen || stations.furnaceOpen || stations.enchantOpen || stations.brewOpen;
 
 const equippedEnchantments = () => findGear(enchantState.gear, enchantState.equippedToolUid)?.enchantments ?? [];
 
@@ -1381,6 +1410,12 @@ const renderXp = (): void => {
 };
 renderXp();
 
+const renderEffects = (): void => {
+  const label = formatEffectsHud(potionEffects);
+  effectsText.textContent = label ? `效果 ${label}` : "";
+};
+renderEffects();
+
 /** Mitigate then subtract HP. Returns damage actually dealt (0 if fully blocked). */
 const applyIncomingDamage = (rawDamage: number): number => {
   const afterArmor = mitigateDamage(armor, rawDamage);
@@ -1390,10 +1425,26 @@ const applyIncomingDamage = (rawDamage: number): number => {
   return dealt;
 };
 
+const tryDrinkPotion = (): boolean => {
+  const potion = pickPotionToDrink(inventory, playerHealth, maxPlayerHealth);
+  if (!potion) return false;
+  const result = drinkPotion(inventory, potionEffects, potion, playerHealth, maxPlayerHealth);
+  if (!result.ok) return false;
+  playerHealth = result.health;
+  renderHealth();
+  renderEffects();
+  renderHotbar();
+  dirty = true;
+  status.textContent = result.message;
+  soundscape.play("pickup");
+  return true;
+};
+
 const tryEatFood = (): boolean => {
+  if (tryDrinkPotion()) return true;
   const foodId = pickFoodToEat(inventory);
   if (!foodId) {
-    status.textContent = "背包里没有食物（苹果/面包/牛肉）";
+    status.textContent = "背包里没有食物或药水";
     return false;
   }
   if (!eatFood(hunger, foodId)) {
@@ -1521,6 +1572,7 @@ const playerSave = (): PlayerSave => ({
   hunger: snapshotHunger(hunger),
   armor: snapshotArmor(armor),
   enchanting: snapshotEnchant(enchantState),
+  brewing: snapshotBrewing(potionEffects),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -1826,9 +1878,12 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   hunger = createHungerState(slot.save.player.hunger);
   armor = createArmorState(slot.save.player.armor);
   enchantState = createEnchantSaveState(slot.save.player.enchanting);
+  potionEffects = createEffects(slot.save.player.brewing);
+  poisonAcc.value = 0;
   const restoredTool = findGear(enchantState.gear, enchantState.equippedToolUid);
   if (restoredTool) stations.equippedTool = restoredTool.item as ExtraItem;
   renderXp();
+  renderEffects();
   renderArmor();
   renderHunger();
   renderArmor();
@@ -1988,6 +2043,14 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         status.textContent = `附魔台已打开 · 书架能量 ${power}/15`;
         return;
       }
+      if (aimed === "brewing_stand") {
+        const key = `${target.position.x},${target.position.y},${target.position.z}`;
+        openBrewAt(stations, inventory, key);
+        releasePointerForUi();
+        refreshStationsUi();
+        status.textContent = "酿造台已打开";
+        return;
+      }
       if (aimed === "bed") {
         const result = trySleepInBed({
           worldTimeMs: dayClock.now(),
@@ -2099,6 +2162,7 @@ document.addEventListener("keydown", (event) => {
     closeCraft(stations, inventory);
     closeFurnace(stations);
     closeEnchant(stations, inventory);
+    closeBrew(stations, inventory);
     refreshStationsUi();
     renderHotbar();
     return;
@@ -2154,7 +2218,17 @@ const updatePlayer = (delta: number): void => {
   const inputX = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
   const inputZ = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
   const wantSprint = keys.has("ShiftLeft") && canSprint(hunger);
-  const speed = wantSprint ? 8 : 4.4;
+  const effectTick = tickEffects(potionEffects, playerHealth, delta, poisonAcc);
+  if (effectTick.healthDelta !== 0) {
+    playerHealth = Math.max(1, Math.min(maxPlayerHealth, playerHealth + effectTick.healthDelta));
+    renderHealth();
+    if (effectTick.healthDelta < 0) {
+      status.textContent = "中毒中…";
+      soundscape.play("hurt");
+    }
+  }
+  if (effectTick.changed) renderEffects();
+  const speed = (wantSprint ? 8 : 4.4) * effectTick.speedMul;
   const size = currentSize();
   const prevX = camera.position.x;
   const prevZ = camera.position.z;
@@ -2685,6 +2759,7 @@ const frame = (now: number): void => {
   findTarget();
   updateMining(delta);
   if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
+  if (tickAllBrewingStands(stations, delta) && stations.brewOpen) refreshStationsUi();
   if (!rendererLost) renderer.render(scene, camera);
   requestAnimationFrame(frame);
 };
@@ -2710,6 +2785,16 @@ craftPanel.addEventListener("click", (event) => {
   refreshStationsUi();
   renderHotbar();
   renderArmor();
+  dirty = true;
+  persist();
+});
+
+brewPanel.addEventListener("click", (event) => {
+  const target = event.target as HTMLElement;
+  if (!handleBrewClick(stations, inventory, target)) return;
+  soundscape.play("craft");
+  refreshStationsUi();
+  renderHotbar();
   dirty = true;
   persist();
 });
@@ -2761,3 +2846,4 @@ enchantPanel.addEventListener("click", (event) => {
   dirty = true;
   persist();
 });
+

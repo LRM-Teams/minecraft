@@ -4,6 +4,7 @@ import type { EndSnapshot } from "./end";
 import type { Inventory } from "./inventory";
 import type { ArmorSave } from "./armor";
 import type { EnchantSave } from "./enchanting";
+import type { BrewingSave } from "./brewing";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
@@ -35,6 +36,8 @@ export type PlayerSave = {
   armor?: ArmorSave;
   /** Optional experience + enchanted gear (Phase-4 enchanting). */
   enchanting?: EnchantSave;
+  /** Optional active potion effects (Phase-4 brewing). */
+  brewing?: BrewingSave;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };

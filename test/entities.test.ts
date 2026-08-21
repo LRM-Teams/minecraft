@@ -96,13 +96,13 @@ describe("Mob combat", () => {
     expect(mob.dead).toBe(true);
     expect(result.deaths).toContain(mob);
     expect(result.drops.length).toBe(1);
-    expect(["dirt", "stone"]).toContain(result.drops[0]);
+    expect(["dirt", "spider_eye"]).toContain(result.drops[0]);
   });
 
   it("uses a distinct drop table for each variety (brute yields raw beef)", () => {
-    expect(mobDropCandidates("stalker")).toEqual(["dirt", "stone"]);
+    expect(mobDropCandidates("stalker")).toEqual(["dirt", "spider_eye"]);
     expect(mobDropCandidates("brute")).toEqual(["raw_beef", "leather", "stone"]);
-    expect(mobDropCandidates("wisp")).toEqual(["sand", "glass"]);
+    expect(mobDropCandidates("wisp")).toEqual(["blaze_rod", "nether_wart"]);
   });
 });
 
