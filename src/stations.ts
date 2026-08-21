@@ -1,14 +1,18 @@
 import {
-  craftFromGrid,
+  asStack,
+  clickCraftBag,
+  clickCraftCell,
+  clickCraftResult,
   emptyGrid,
   listRecipes,
   matchRecipe,
   ownedItems,
-  placeIntoGrid,
   recipeNeedsTable,
+  refundCursor,
   refundGrid,
-  takeFromGrid,
   type CraftCell,
+  type CraftCursor,
+  type CraftPointerButton,
 } from "./crafting";
 import type { Inventory } from "./inventory";
 import { ITEM_LABELS, isArmor, isTool, type ExtraItem, type ItemType } from "./items";
@@ -71,6 +75,8 @@ export type StationController = {
   craftOpen: boolean;
   craftMode: CraftMode;
   craftGrid: CraftCell[];
+  /** Floating stack under the mouse while crafting (vanilla JE cursor). */
+  craftCursor: CraftCursor;
   furnaceOpen: boolean;
   furnaceKey: string | null;
   furnaces: Map<string, FurnaceState>;
@@ -88,6 +94,7 @@ export const createStations = (): StationController => ({
   craftOpen: false,
   craftMode: "inventory",
   craftGrid: emptyGrid(2),
+  craftCursor: null,
   furnaceOpen: false,
   furnaceKey: null,
   furnaces: new Map(),
@@ -111,6 +118,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
   closeBrew(stations, inventory);
   stations.craftMode = "inventory";
   stations.craftGrid = emptyGrid(2);
+  stations.craftCursor = null;
   stations.craftOpen = true;
 };
 
@@ -118,15 +126,20 @@ export const openTableCraft = (stations: StationController, inventory: Inventory
   closeFurnace(stations);
   closeEnchant(stations, inventory);
   closeBrew(stations, inventory);
-  if (stations.craftOpen) refundGrid(inventory, stations.craftGrid);
+  if (stations.craftOpen) {
+    refundGrid(inventory, stations.craftGrid);
+    stations.craftCursor = refundCursor(inventory, stations.craftCursor);
+  }
   stations.craftMode = "table";
   stations.craftGrid = emptyGrid(3);
+  stations.craftCursor = null;
   stations.craftOpen = true;
 };
 
 export const closeCraft = (stations: StationController, inventory: Inventory): void => {
   if (!stations.craftOpen) return;
   refundGrid(inventory, stations.craftGrid);
+  stations.craftCursor = refundCursor(inventory, stations.craftCursor);
   stations.craftOpen = false;
 };
 
@@ -225,8 +238,15 @@ export const renderCraftPanelHtml = (
   const title = stations.craftMode === "table" ? "工作台 3×3" : "背包合成 2×2";
   const recipe = matchRecipe(stations.craftGrid);
   const resultLabel = recipe ? `${ITEM_LABELS[recipe.result.item]} ×${recipe.result.count}` : "—";
-  const cells = stations.craftGrid.map((item, index) => {
-    const label = item ? ITEM_LABELS[item] : "";
+  const cursor = stations.craftCursor;
+  const cursorLabel = cursor
+    ? `光标 ${ITEM_LABELS[cursor.item]} ×${cursor.count}`
+    : "光标 空 · 左键取放 · 右键半组/放1 · Shift+左键产物连做";
+  const cells = stations.craftGrid.map((cell, index) => {
+    const stack = asStack(cell);
+    const label = stack
+      ? `${ITEM_LABELS[stack.item]}${stack.count > 1 ? ` ×${stack.count}` : ""}`
+      : "";
     return `<button type="button" class="station-cell" data-craft-cell="${index}">${label}</button>`;
   }).join("");
   const bag = ownedItems(inventory).map((item) =>
@@ -259,10 +279,10 @@ export const renderCraftPanelHtml = (
   }).join("") || "<p class='station-empty'>尚未合成护甲</p>";
 
   return `
-    <div class="station-head"><strong>${title}</strong><button type="button" data-craft-close>关闭 Esc</button></div>
+    <div class="station-head"><strong>${title}</strong><span class="craft-cursor">${cursorLabel}</span><button type="button" data-craft-close>关闭 Esc</button></div>
     <div class="station-body armor-layout">
       <div class="craft-grid size-${size}">${cells}</div>
-      <button type="button" class="craft-result" data-craft-take>${resultLabel}</button>
+      <button type="button" class="craft-result" data-craft-take title="左键取到光标 · Shift+左键连做到背包">${resultLabel}</button>
       <div class="station-col"><h4>背包</h4><div class="station-bag-list">${bag}</div></div>
       <div class="station-col"><h4>手持工具</h4><div class="station-bag-list">${tools}</div></div>
       <div class="station-col"><h4>护甲 ${totalArmorPoints(armor)}/20</h4><div class="station-bag-list">${worn}${armorBtns}</div></div>
@@ -341,30 +361,54 @@ export const renderEnchantPanelHtml = (
   `;
 };
 
+export type CraftClickOptions = {
+  button?: CraftPointerButton;
+  shift?: boolean;
+};
+
 export const handleCraftClick = (
   stations: StationController,
   inventory: Inventory,
   target: HTMLElement,
   armor?: ArmorState,
+  options: CraftClickOptions = {},
 ): boolean => {
+  const button: CraftPointerButton = options.button ?? "left";
+  const shift = Boolean(options.shift);
   if (target.closest("[data-craft-close]")) {
     closeCraft(stations, inventory);
     return true;
   }
   const cell = target.closest<HTMLElement>("[data-craft-cell]");
   if (cell?.dataset.craftCell !== undefined) {
-    takeFromGrid(inventory, stations.craftGrid, Number(cell.dataset.craftCell));
+    stations.craftCursor = clickCraftCell(
+      stations.craftGrid,
+      stations.craftCursor,
+      Number(cell.dataset.craftCell),
+      button,
+    );
     return true;
   }
   const itemBtn = target.closest<HTMLElement>("[data-craft-item]");
   if (itemBtn?.dataset.craftItem) {
-    placeIntoGrid(inventory, stations.craftGrid, itemBtn.dataset.craftItem as ItemType);
+    stations.craftCursor = clickCraftBag(
+      inventory,
+      stations.craftCursor,
+      itemBtn.dataset.craftItem as ItemType,
+      button,
+    );
     return true;
   }
   if (target.closest("[data-craft-take]")) {
-    const result = craftFromGrid(inventory, stations.craftGrid);
-    if (result && isTool(result.item) && !stations.equippedTool) {
-      stations.equippedTool = result.item as ExtraItem;
+    const { cursor, crafted } = clickCraftResult(
+      inventory,
+      stations.craftGrid,
+      stations.craftCursor,
+      shift,
+    );
+    stations.craftCursor = cursor;
+    if (crafted && isTool(crafted.item) && !stations.equippedTool) {
+      stations.equippedTool = crafted.item as ExtraItem;
     }
     return true;
   }

@@ -1356,6 +1356,30 @@ const renderHotbar = (): void => {
 };
 renderHotbar();
 
+const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
+
+const anyStationOpen = (): boolean =>
+  stations.craftOpen || stations.furnaceOpen || stations.enchantOpen || stations.brewOpen;
+
+/** Keep pause/start overlay from covering station panels (z-index + visibility). */
+const syncStartScreenForUi = (): void => {
+  const locked = document.pointerLockElement === renderer.domElement;
+  startScreen.classList.toggle("hidden", locked || anyStationOpen());
+  hudRoot.classList.toggle("station-active", anyStationOpen());
+};
+
+const releasePointerForUi = (): void => {
+  if (document.pointerLockElement) document.exitPointerLock();
+};
+
+/** After closing station UIs, hide the start overlay and re-lock the pointer for play. */
+const resumePlayAfterUi = (): void => {
+  syncStartScreenForUi();
+  if (!anyStationOpen() && document.pointerLockElement !== renderer.domElement) {
+    void renderer.domElement.requestPointerLock();
+  }
+};
+
 const refreshStationsUi = (): void => {
   craftPanel.classList.toggle("hidden", !stations.craftOpen);
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
@@ -1373,16 +1397,10 @@ const refreshStationsUi = (): void => {
     const stand = activeBrewingStand(stations);
     if (stand) brewPanel.innerHTML = renderBrewPanelHtml(stand, inventory);
   }
+  syncStartScreenForUi();
 };
-
-const anyStationOpen = (): boolean =>
-  stations.craftOpen || stations.furnaceOpen || stations.enchantOpen || stations.brewOpen;
 
 const equippedEnchantments = () => findGear(enchantState.gear, enchantState.equippedToolUid)?.enchantments ?? [];
-
-const releasePointerForUi = (): void => {
-  if (document.pointerLockElement) document.exitPointerLock();
-};
 
 const renderHealth = (): void => {
   healthText.textContent = `生命 ${"♥".repeat(playerHealth)}${"♡".repeat(maxPlayerHealth - playerHealth)}`;
@@ -2092,7 +2110,9 @@ renderer.domElement.addEventListener("mousedown", (event) => {
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
 document.addEventListener("mouseup", (event) => { if (event.button === 0) stopMining(); });
 document.addEventListener("pointerlockchange", () => {
-  startScreen.classList.toggle("hidden", document.pointerLockElement === renderer.domElement);
+  // Do not reveal #start-screen while a station UI is open — it sits above #hud
+  // in the stacking order and would block mouse crafting / furnace / enchant / brew.
+  syncStartScreenForUi();
   if (document.pointerLockElement !== renderer.domElement) stopMining();
 });
 document.addEventListener("mousemove", (event) => {
@@ -2134,7 +2154,12 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "KeyE" && !event.repeat) {
     soundscape.unlock();
     openInventoryCraft(stations, inventory);
-    if (stations.craftOpen) releasePointerForUi();
+    if (stations.craftOpen) {
+      releasePointerForUi();
+      syncStartScreenForUi();
+    } else {
+      resumePlayAfterUi();
+    }
     refreshStationsUi();
     renderHotbar();
     status.textContent = stations.craftOpen ? "背包合成 2×2" : "合成已关闭";
@@ -2165,6 +2190,7 @@ document.addEventListener("keydown", (event) => {
     closeBrew(stations, inventory);
     refreshStationsUi();
     renderHotbar();
+    resumePlayAfterUi();
     return;
   }
   if (event.code === "KeyN" && !event.repeat) {
@@ -2765,10 +2791,10 @@ const frame = (now: number): void => {
 };
 requestAnimationFrame(frame);
 
-craftPanel.addEventListener("click", (event) => {
+const applyCraftPanelClick = (event: MouseEvent, button: "left" | "right"): void => {
   const target = event.target as HTMLElement;
   const beforeArmor = { ...armor };
-  if (!handleCraftClick(stations, inventory, target, armor)) return;
+  if (!handleCraftClick(stations, inventory, target, armor, { button, shift: event.shiftKey })) return;
   for (const slot of ["helmet", "chestplate", "leggings", "boots"] as const) {
     if (beforeArmor[slot] && !armor[slot]) enchantState.armorEnchants[slot] = [];
     if (armor[slot] && armor[slot] !== beforeArmor[slot]) {
@@ -2787,6 +2813,13 @@ craftPanel.addEventListener("click", (event) => {
   renderArmor();
   dirty = true;
   persist();
+  if (!anyStationOpen()) resumePlayAfterUi();
+};
+
+craftPanel.addEventListener("click", (event) => applyCraftPanelClick(event, "left"));
+craftPanel.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  applyCraftPanelClick(event, "right");
 });
 
 brewPanel.addEventListener("click", (event) => {
@@ -2797,6 +2830,7 @@ brewPanel.addEventListener("click", (event) => {
   renderHotbar();
   dirty = true;
   persist();
+  if (!anyStationOpen()) resumePlayAfterUi();
 });
 
 furnacePanel.addEventListener("click", (event) => {
@@ -2807,6 +2841,7 @@ furnacePanel.addEventListener("click", (event) => {
   renderHotbar();
   dirty = true;
   persist();
+  if (!anyStationOpen()) resumePlayAfterUi();
 });
 
 enchantPanel.addEventListener("click", (event) => {
@@ -2845,5 +2880,6 @@ enchantPanel.addEventListener("click", (event) => {
   renderXp();
   dirty = true;
   persist();
+  if (!anyStationOpen()) resumePlayAfterUi();
 });
 

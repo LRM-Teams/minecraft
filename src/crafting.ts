@@ -2,8 +2,23 @@ import type { Inventory } from "./inventory";
 import type { ExtraItem, ItemType } from "./items";
 import { isExtraItem } from "./items";
 
-export type CraftCell = ItemType | null;
+/** Stack on the mouse cursor while a crafting UI is open (vanilla JE). */
+export type CraftCursor = { item: ItemType; count: number } | null;
+/** Grid cell: legacy bare item id (count 1) or an explicit stack. */
+export type CraftStack = { item: ItemType; count: number };
+export type CraftCell = ItemType | CraftStack | null;
 export type CraftResult = { item: ItemType; count: number };
+export type CraftPointerButton = "left" | "right";
+
+const STACK_MAX = 64;
+
+export const asStack = (cell: CraftCell): CraftStack | null => {
+  if (!cell) return null;
+  if (typeof cell === "string") return { item: cell, count: 1 };
+  return { item: cell.item, count: cell.count };
+};
+
+export const cellItem = (cell: CraftCell): ItemType | null => asStack(cell)?.item ?? null;
 
 export type Recipe = {
   id: string;
@@ -281,8 +296,10 @@ const gridSize = (grid: readonly CraftCell[]): number => {
 
 const countItems = (grid: readonly CraftCell[]): Map<ItemType, number> => {
   const counts = new Map<ItemType, number>();
-  for (const item of grid) {
+  for (const cell of grid) {
+    const item = cellItem(cell);
     if (!item) continue;
+    // Shapeless / occupancy counts slots (vanilla), not stack size inside a slot.
     counts.set(item, (counts.get(item) ?? 0) + 1);
   }
   return counts;
@@ -290,7 +307,8 @@ const countItems = (grid: readonly CraftCell[]): Map<ItemType, number> => {
 
 const recipeCounts = (recipe: Recipe): Map<ItemType, number> => {
   const counts = new Map<ItemType, number>();
-  for (const item of recipe.pattern) {
+  for (const cell of recipe.pattern) {
+    const item = cellItem(cell);
     if (!item) continue;
     counts.set(item, (counts.get(item) ?? 0) + 1);
   }
@@ -321,12 +339,12 @@ const shapedMatchAt = (
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const inPattern = x >= originX && x < originX + recipe.width && y >= originY && y < originY + height;
-      const gridItem = grid[y * size + x] ?? null;
+      const gridItem = cellItem(grid[y * size + x] ?? null);
       if (!inPattern) {
         if (gridItem !== null) return false;
         continue;
       }
-      const patternItem = recipe.pattern[(y - originY) * recipe.width + (x - originX)] ?? null;
+      const patternItem = cellItem(recipe.pattern[(y - originY) * recipe.width + (x - originX)] ?? null);
       if (patternItem !== gridItem) return false;
     }
   }
@@ -372,16 +390,49 @@ export const consumeGrid = (inventory: Inventory, grid: readonly CraftCell[]): b
   return true;
 };
 
+/** Consume one craft: each occupied cell loses 1; leftover stacks stay (vanilla JE). */
+const consumeOneCraft = (grid: CraftCell[]): Recipe | undefined => {
+  const recipe = matchRecipe(grid);
+  if (!recipe) return undefined;
+  for (let i = 0; i < grid.length; i += 1) {
+    const stack = asStack(grid[i]);
+    if (!stack) continue;
+    if (stack.count <= 1) grid[i] = null;
+    else grid[i] = { item: stack.item, count: stack.count - 1 };
+  }
+  return recipe;
+};
+
 export const craftFromGrid = (
   inventory: Inventory,
   grid: CraftCell[],
 ): CraftResult | undefined => {
-  const recipe = matchRecipe(grid);
+  const recipe = consumeOneCraft(grid);
   if (!recipe) return undefined;
-  // Ingredients already sit in the grid (moved out of the bag via placeIntoGrid).
-  for (let i = 0; i < grid.length; i += 1) grid[i] = null;
   inventory[recipe.result.item] = (inventory[recipe.result.item] ?? 0) + recipe.result.count;
   return recipe.result;
+};
+
+/**
+ * Shift-click result: craft as many as the grid allows (up to one output stack),
+ * depositing straight into the bag (vanilla JE).
+ */
+export const craftMaxFromGrid = (
+  inventory: Inventory,
+  grid: CraftCell[],
+): CraftResult | undefined => {
+  const first = matchRecipe(grid);
+  if (!first) return undefined;
+  let total = 0;
+  while (total + first.result.count <= STACK_MAX) {
+    const recipe = matchRecipe(grid);
+    if (!recipe || recipe.id !== first.id) break;
+    if (!consumeOneCraft(grid)) break;
+    total += first.result.count;
+  }
+  if (total <= 0) return undefined;
+  inventory[first.result.item] = (inventory[first.result.item] ?? 0) + total;
+  return { item: first.result.item, count: total };
 };
 
 export const placeIntoGrid = (
@@ -393,25 +444,146 @@ export const placeIntoGrid = (
   const slot = grid.findIndex((entry) => entry === null);
   if (slot < 0) return false;
   inventory[item] -= 1;
-  grid[slot] = item;
+  grid[slot] = { item, count: 1 };
   return true;
 };
 
 export const takeFromGrid = (inventory: Inventory, grid: CraftCell[], index: number): boolean => {
-  const item = grid[index];
-  if (!item) return false;
+  const stack = asStack(grid[index]);
+  if (!stack) return false;
   grid[index] = null;
-  inventory[item] = (inventory[item] ?? 0) + 1;
+  inventory[stack.item] = (inventory[stack.item] ?? 0) + stack.count;
   return true;
 };
 
 export const refundGrid = (inventory: Inventory, grid: CraftCell[]): void => {
   for (let i = 0; i < grid.length; i += 1) {
-    const item = grid[i];
-    if (!item) continue;
-    inventory[item] = (inventory[item] ?? 0) + 1;
+    const stack = asStack(grid[i]);
+    if (!stack) continue;
+    inventory[stack.item] = (inventory[stack.item] ?? 0) + stack.count;
     grid[i] = null;
   }
+};
+
+export const refundCursor = (inventory: Inventory, cursor: CraftCursor): CraftCursor => {
+  if (!cursor) return null;
+  inventory[cursor.item] = (inventory[cursor.item] ?? 0) + cursor.count;
+  return null;
+};
+
+/**
+ * Vanilla-ish bag click against a count-map inventory (not slotted).
+ * Left: pick all / deposit all / swap. Right: pick half / deposit one.
+ */
+export const clickCraftBag = (
+  inventory: Inventory,
+  cursor: CraftCursor,
+  item: ItemType,
+  button: CraftPointerButton,
+): CraftCursor => {
+  const bagCount = inventory[item] ?? 0;
+  if (!cursor) {
+    if (bagCount <= 0) return null;
+    if (button === "right") {
+      const take = Math.ceil(bagCount / 2);
+      inventory[item] -= take;
+      return { item, count: take };
+    }
+    inventory[item] = 0;
+    return { item, count: bagCount };
+  }
+  if (cursor.item === item) {
+    if (button === "right") {
+      inventory[item] = bagCount + 1;
+      return cursor.count <= 1 ? null : { item: cursor.item, count: cursor.count - 1 };
+    }
+    inventory[item] = bagCount + cursor.count;
+    return null;
+  }
+  // Different item: swap (left or right).
+  inventory[cursor.item] = (inventory[cursor.item] ?? 0) + cursor.count;
+  if (bagCount <= 0) return null;
+  inventory[item] = 0;
+  return { item, count: bagCount };
+};
+
+/** Vanilla craft-grid slot click with a cursor stack. */
+export const clickCraftCell = (
+  grid: CraftCell[],
+  cursor: CraftCursor,
+  index: number,
+  button: CraftPointerButton,
+): CraftCursor => {
+  if (index < 0 || index >= grid.length) return cursor;
+  const stack = asStack(grid[index]);
+
+  if (button === "left") {
+    if (!cursor) {
+      if (!stack) return null;
+      grid[index] = null;
+      return { item: stack.item, count: stack.count };
+    }
+    if (!stack) {
+      grid[index] = { item: cursor.item, count: cursor.count };
+      return null;
+    }
+    if (stack.item === cursor.item) {
+      const space = STACK_MAX - stack.count;
+      if (space <= 0) return cursor;
+      const moved = Math.min(space, cursor.count);
+      grid[index] = { item: stack.item, count: stack.count + moved };
+      return cursor.count === moved ? null : { item: cursor.item, count: cursor.count - moved };
+    }
+    grid[index] = { item: cursor.item, count: cursor.count };
+    return { item: stack.item, count: stack.count };
+  }
+
+  // Right click
+  if (!cursor) {
+    if (!stack) return null;
+    const take = Math.ceil(stack.count / 2);
+    const left = stack.count - take;
+    grid[index] = left > 0 ? { item: stack.item, count: left } : null;
+    return { item: stack.item, count: take };
+  }
+  if (!stack) {
+    grid[index] = { item: cursor.item, count: 1 };
+    return cursor.count <= 1 ? null : { item: cursor.item, count: cursor.count - 1 };
+  }
+  if (stack.item === cursor.item && stack.count < STACK_MAX) {
+    grid[index] = { item: stack.item, count: stack.count + 1 };
+    return cursor.count <= 1 ? null : { item: cursor.item, count: cursor.count - 1 };
+  }
+  return cursor;
+};
+
+/**
+ * Take crafting output onto the cursor (or shift → bag via craftMaxFromGrid).
+ * Cursor must be empty or already holding the same result item with room.
+ */
+export const clickCraftResult = (
+  inventory: Inventory,
+  grid: CraftCell[],
+  cursor: CraftCursor,
+  shift: boolean,
+): { cursor: CraftCursor; crafted: CraftResult | undefined } => {
+  const recipe = matchRecipe(grid);
+  if (!recipe) return { cursor, crafted: undefined };
+
+  if (shift) {
+    if (cursor) return { cursor, crafted: undefined };
+    return { cursor, crafted: craftMaxFromGrid(inventory, grid) };
+  }
+
+  if (cursor && cursor.item !== recipe.result.item) return { cursor, crafted: undefined };
+  if (cursor && cursor.count + recipe.result.count > STACK_MAX) return { cursor, crafted: undefined };
+
+  if (!consumeOneCraft(grid)) return { cursor, crafted: undefined };
+  const nextCount = (cursor?.count ?? 0) + recipe.result.count;
+  return {
+    cursor: { item: recipe.result.item, count: nextCount },
+    crafted: recipe.result,
+  };
 };
 
 export const ownedItems = (inventory: Inventory): ItemType[] => {
