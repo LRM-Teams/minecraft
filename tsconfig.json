@@ -6,10 +6,12 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "types": ["vite/client"],
     "allowImportingTsExtensions": false,
     "isolatedModules": true,
     "noEmit": true,
     "strict": true
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "assets"]
 }

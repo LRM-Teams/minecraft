@@ -38,6 +38,8 @@ npm run dev
 
 可重复的 wiki 采集脚本在 `tools/icon-scrape/`（见该目录 README）。产物在 `assets/icons/`：结构化清单、`itemId→纹理` 映射，以及按许可隔离的本地缓存（`distributable` / `restricted` / `unknown`）。当前缓存为 wiki 可引用图，标记为受限参考素材，**不作为可分发官方贴图入库**。
 
+前端通过 `src/icons.ts` 读取 `mapping.json`：热键栏与准星下手持预览使用可辨识图标；世界方块面在预览构建中加载同一缓存（仍落在 `cache/restricted/`，不迁入 `cache/distributable/`）。正式对外分发需待许可清理后再切 atlas。
+
 ## 质量检查
 
 ```bash
