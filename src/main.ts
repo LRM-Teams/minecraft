@@ -19,6 +19,7 @@ import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, load
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
+import { resolveRightClick, emptyHotbarFeedback } from "./playerInteract";
 import { ITEM_LABELS, SWORD_DAMAGE, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
 import {
   EXHAUSTION,
@@ -355,6 +356,8 @@ const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
   pale: new THREE.Color(0xb9bfce),
   // Sakura: warm pink wash → cherry-blossom canopies and petal floor.
   sakura: new THREE.Color(0xf0b8c6),
+  // Ocean: cool blue wash on sand/shore foliage for identifiable seas.
+  ocean: new THREE.Color(0x7ec8e3),
 };
 
 type BlockFace = "side" | "top" | "bottom";
@@ -1452,8 +1455,10 @@ syncDimensionState();
 
 const renderHotbar = (): void => {
   hotbar.innerHTML = BLOCK_TYPES.map((type, index) => {
-    const keyLabel = index === 9 ? "0" : index + 1;
-    return `<div class="slot ${index === selected ? "selected" : ""}">${keyLabel}<span class="swatch ${type}"></span><small>${inventory[type]}</small></div>`;
+    const keyLabel = index === 9 ? "0" : String(index + 1);
+    const short = labels[type].slice(0, 2);
+    const empty = inventory[type] <= 0 ? " empty" : "";
+    return `<div class="slot ${index === selected ? "selected" : ""}${empty}" title="${labels[type]} ×${inventory[type]}"><span class="slot-key">${keyLabel}</span><span class="swatch ${type}"></span><span class="slot-name">${short}</span><small>${inventory[type]}</small></div>`;
   }).join("");
   const toolLabel = stations.equippedTool ? ` · 工具 ${ITEM_LABELS[stations.equippedTool]}` : "";
   status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}${toolLabel}` : `空槽${toolLabel}`;
@@ -1882,7 +1887,10 @@ const edit = (place: boolean): void => {
     }
   } else {
     const type = BLOCK_TYPES[selected];
-    if (!type || inventory[type] <= 0) return;
+    if (!type || inventory[type] <= 0) {
+      status.textContent = emptyHotbarFeedback(type ? labels[type] : undefined);
+      return;
+    }
     const position = { x: target.position.x + target.normal.x, y: target.position.y + target.normal.y, z: target.position.z + target.normal.z };
     if (intersectsPlayer(position)) return;
     if (type === "bed") {
@@ -2176,6 +2184,18 @@ renderer.domElement.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
     if (dimension === "overworld" && target) {
       const aimed = world.get(target.position.x, target.position.y, target.position.z);
+      const heldType = BLOCK_TYPES[selected];
+      const holdingBlock = Boolean(heldType && inventory[heldType] > 0);
+      const sneaking = keys.has("ShiftLeft") || keys.has("ShiftRight");
+      const action = resolveRightClick({ aimedBlock: aimed, holdingBlock, sneaking });
+      if (action === "empty") {
+        status.textContent = emptyHotbarFeedback(heldType ? labels[heldType] : undefined);
+        return;
+      }
+      if (action === "place") {
+        edit(true);
+        return;
+      }
       if (aimed === "crafting_table") {
         openTableCraft(stations, inventory);
         releasePointerForUi();
@@ -2394,7 +2414,7 @@ addEventListener("resize", () => {
 const updatePlayer = (delta: number): void => {
   const inputX = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
   const inputZ = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
-  const wantSprint = keys.has("ShiftLeft") && canSprint(hunger);
+  const wantSprint = (keys.has("ControlLeft") || keys.has("ControlRight")) && canSprint(hunger);
   const effectTick = tickEffects(potionEffects, playerHealth, delta, poisonAcc);
   if (effectTick.healthDelta !== 0) {
     playerHealth = Math.max(1, Math.min(maxPlayerHealth, playerHealth + effectTick.healthDelta));

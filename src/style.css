@@ -33,6 +33,21 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .slot.selected { border-color: #f5f0d2; transform: translateY(-4px); box-shadow: inset 0 0 0 2px #8b8e85, 0 0 12px #fff7c9; color: white; }
 .slot small { position: absolute; bottom: 3px; right: 5px; font-size: 10px; color: white; }
 .swatch { width: 23px; height: 23px; border: 2px solid rgba(255,255,255,.26); box-shadow: inset -4px -4px rgba(0,0,0,.15); }
+
+.slot-key { position: absolute; top: 2px; left: 4px; font-size: 9px; color: #9aa7a8; }
+.slot-name { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 9px; color: #f1dda3; line-height: 1; pointer-events: none; }
+.slot.empty { opacity: .42; }
+.slot.empty .swatch { filter: grayscale(.8); }
+.swatch.grass { background: #5a9f3e; }
+.swatch.dirt { background: #8b5a2b; }
+.swatch.stone { background: #8a8e92; }
+.swatch.wood { background: #6b4a2b; }
+.swatch.planks { background: #c49a5c; }
+.swatch.leaves { background: #3f7a32; }
+.swatch.sand { background: #e8d39a; }
+.swatch.water { background: #3a6fc4; }
+.swatch.bricks { background: #a04a3a; }
+.swatch.glass { background: #c5e8f0; opacity: .85; }
 .crafting_table { background: linear-gradient(135deg, #c49a5c 50%, #8b5a2b 50%); }.furnace { background: #6a6e72; border-color: #3a3d40; }
 .enchanting_table { background: radial-gradient(circle at 50% 40%, #c77dff 0 28%, #5a2a6e 29% 70%, #2b2333 71% 100%); }
 .bookshelf { background: linear-gradient(90deg, #8b5a2b 0 20%, #d7c4a0 20% 35%, #8b5a2b 35% 55%, #d7c4a0 55% 70%, #8b5a2b 70% 100%); }

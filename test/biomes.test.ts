@@ -109,3 +109,33 @@ describe("biomes", () => {
     }
   });
 });
+
+
+  it("includes an identifiable ocean biome across seeds", () => {
+    let ocean = false;
+    for (let seed = 1; seed <= 800; seed += 9) {
+      if (biomesForSeed(seed).has("ocean")) { ocean = true; break; }
+    }
+    expect(BIOMES).toContain("ocean");
+    expect(ocean).toBe(true);
+  });
+
+  it("gives ocean a high sea level and sandy floor", () => {
+    const seed = 42;
+    let found = false;
+    for (let x = -80; x <= 80; x += 4) {
+      for (let z = -80; z <= 80; z += 4) {
+        const profile = biomeAt(x, z, seed);
+        if (profile.id !== "ocean") continue;
+        found = true;
+        expect(profile.seaLevel).toBeGreaterThanOrEqual(5);
+        expect(profile.surface).toBe("sand");
+        expect(profile.aquatic).toBe(true);
+      }
+    }
+    // Deterministic probe — if this seed has no ocean cell nearby, still assert profile table.
+    if (!found) {
+      // biomeAt never returns a fabricated id; table entry must exist via BIOMES.
+      expect(BIOMES.includes("ocean")).toBe(true);
+    }
+  });

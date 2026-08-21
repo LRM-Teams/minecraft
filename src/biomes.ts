@@ -18,7 +18,7 @@ import type { BlockType } from "./world";
 export const BIOME_CELL = 24;
 
 /** Identifiable biomes. At least 3 are required by the acceptance criteria. */
-export const BIOMES = ["plains", "forest", "desert", "mountains", "pale_garden", "sakura"] as const;
+export const BIOMES = ["plains", "forest", "desert", "mountains", "pale_garden", "sakura", "ocean"] as const;
 export type BiomeId = (typeof BIOMES)[number];
 
 /**
@@ -27,7 +27,7 @@ export type BiomeId = (typeof BIOMES)[number];
  * and consumed by the renderer as a per-instance color wash. `default` means the
  * stock block colors are used unchanged.
  */
-export type BiomeVariant = "default" | "pale" | "sakura";
+export type BiomeVariant = "default" | "pale" | "sakura" | "ocean";
 
 /** Rules used to shape a column of terrain in a given biome. */
 export interface BiomeProfile {
@@ -95,6 +95,13 @@ const PROFILES: Record<BiomeId, BiomeProfile> = {
     surface: "grass", subsurface: "dirt", underground: "stone", seaLevel: 3,
     treeThreshold: 0.58, aquatic: true, variant: "sakura", flowerBlock: "planks", flowerChance: 0.5,
   },
+  // 海洋 Ocean: deep flooded basins — sand floor under a high sea level so the
+  // open world has identifiable water expanses next to plains/desert shores.
+  ocean: {
+    id: "ocean", name: "海洋", baseHeight: 1, amplitude: 0.6, roughness: 0.45,
+    surface: "sand", subsurface: "sand", underground: "stone", seaLevel: 7,
+    treeThreshold: 1, aquatic: true, variant: "ocean",
+  },
 };
 
 const BIOME_IDS: BiomeId[] = BIOMES.slice();
@@ -114,6 +121,8 @@ const biomeForCell = (cx: number, cz: number, seed: number): BiomeId => {
   // several distinct, bordered regions per world while staying reproducible.
   const heat = hash(cx, cz, seed * 101 + 7);
   const moisture = hash(cx * 2 + 13, cz * 3 - 5, seed * 33 + 1);
+  // Deep wet basins → ocean (identifiable open-water biome for LRM-1594).
+  if (moisture > 0.82 && heat < 0.55) return "ocean";
   if (moisture > 0.7) return "forest";        // very wet → lush
   if (moisture > 0.52) {
     // Damp but not flooded: cool → pale/eerie garden, mild → cherry blossom.
