@@ -40,6 +40,11 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .lapis_ore { background: #1f4fd8; border-color: #7a8186; }
 .obsidian { background: #2b2333; border-color: #5a4a6a; }
 .torch { background: radial-gradient(circle at 50% 30%, #ffe08a 0 35%, #c45a12 36% 55%, #5a3a22 56% 100%); }
+.redstone_ore { background: radial-gradient(circle at 40% 40%, #ff3030 0 30%, #7a8186 31% 100%); }
+.redstone_dust { background: #c41e1e; border-color: #7a1010; }
+.lever { background: linear-gradient(180deg, #c9b896 0 25%, #8a7a5a 25% 70%, #6a6e72 70% 100%); }
+.redstone_torch { background: radial-gradient(circle at 50% 30%, #ff6060 0 35%, #c01010 36% 55%, #5a3a22 56% 100%); }
+.redstone_lamp { background: radial-gradient(circle at 50% 50%, #ffd070 0 35%, #5a4030 36% 100%); }
 .station-bag.enchant-offer.locked { opacity: .45; cursor: not-allowed; }
 .wool { background: #f2f0e8; border-color: #c9c4b8; }
 .bed { background: linear-gradient(180deg, #c43c3c 0 45%, #8b5a2b 45% 100%); }

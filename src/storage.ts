@@ -5,6 +5,7 @@ import type { Inventory } from "./inventory";
 import type { ArmorSave } from "./armor";
 import type { EnchantSave } from "./enchanting";
 import type { BrewingSave } from "./brewing";
+import type { RedstoneSave } from "./redstone";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
@@ -38,6 +39,8 @@ export type PlayerSave = {
   enchanting?: EnchantSave;
   /** Optional active potion effects (Phase-4 brewing). */
   brewing?: BrewingSave;
+  /** Optional lever ON map for redstone circuits (Phase-4). */
+  redstone?: RedstoneSave;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
