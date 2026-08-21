@@ -1,9 +1,20 @@
 import { ITEM_TYPES, type ItemType } from "./items";
+import { STARTER_STACKS } from "./hotbar";
 
 export type Inventory = Record<ItemType, number>;
 
+/** Empty bag, or restore a save (partial counts). */
 export const createInventory = (saved?: Partial<Inventory>): Inventory =>
   Object.fromEntries(ITEM_TYPES.map((type) => [type, saved?.[type] ?? 0])) as Inventory;
+
+/** New-world starter stacks so right-click place works immediately. */
+export const createStarterInventory = (): Inventory => {
+  const inventory = createInventory();
+  for (const [type, count] of Object.entries(STARTER_STACKS)) {
+    inventory[type as ItemType] = count ?? 0;
+  }
+  return inventory;
+};
 
 /** Quick-craft: log → planks (same as shapeless recipe). */
 export const craftPlanks = (inventory: Inventory): boolean => {

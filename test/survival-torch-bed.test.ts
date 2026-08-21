@@ -89,6 +89,9 @@ describe("torch placement & lighting queries", () => {
   it("allows torch on a solid floor or against a solid wall", () => {
     const world = new VoxelWorld(1, 4);
     const y = world.topY(0, 0) + 1;
+    // Clear destination cells so biome remaps cannot leave solids in the way.
+    world.remove({ x: 0, y, z: 0 });
+    world.remove({ x: 2, y, z: 0 });
     expect(canPlaceTorchAt(world, { x: 0, y, z: 0 })).toBe(true);
     world.set({ x: 1, y, z: 0 }, "stone");
     expect(canPlaceTorchAt(world, { x: 2, y, z: 0 }, { x: 1, y, z: 0 })).toBe(true);

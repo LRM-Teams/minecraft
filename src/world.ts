@@ -6,6 +6,10 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 /** Blocks that do not occlude neighbours or block movement (torch / dust / lever fixtures). */
 export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch", "redstone_dust", "lever", "redstone_torch"]);
 export const CHUNK_SIZE = 16;
+/** Soft vertical build limit (inclusive). */
+export const MAX_BUILD_Y = 24;
+/** Default chunk radius streamed around the player for infinite exploration. */
+export const STREAM_CHUNK_RADIUS = 3;
 
 export type BlockPosition = { x: number; y: number; z: number };
 /** Stable building anchors for the later villager simulation. */
@@ -20,6 +24,7 @@ const NEIGHBORS: BlockPosition[] = [
 ];
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
+const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
 const hash = (x: number, z: number, seed: number) => {
   const value = Math.sin(x * 12.9898 + z * 78.233 + seed * 0.12345) * 43758.5453;
   return value - Math.floor(value);
@@ -37,18 +42,24 @@ const cloneVillage = (village: VillageAnchor): VillageAnchor => ({
   })),
 });
 
-/** A deterministic, compact voxel world. Rendering deliberately lives elsewhere. */
+/**
+ * Deterministic voxel world with infinite chunk streaming.
+ * `size` is the initial generated radius (save/compat); exploration streams beyond it.
+ */
 export class VoxelWorld {
   readonly blocks = new Map<string, BlockType>();
   /** Village metadata is seed-stable and is retained alongside world snapshots. */
   readonly villages: VillageAnchor[] = [];
   readonly size: number;
   readonly seed: number;
+  /** Chunks already terrain-generated (player edits never clear this). */
+  private readonly generatedChunks = new Set<string>();
 
   constructor(seed = 72831, size = 48) {
     this.seed = seed;
     this.size = size;
-    this.generate();
+    this.ensureRadius(0, 0, size);
+    this.generateVillage();
   }
 
   /** First village convenience view for UI callers (undefined when no plains fit). */
@@ -67,7 +78,7 @@ export class VoxelWorld {
   }
 
   set(position: BlockPosition, type: BlockType): void {
-    if (position.y < 0 || position.y > 24 || Math.abs(position.x) > this.size || Math.abs(position.z) > this.size) return;
+    if (position.y < 0 || position.y > MAX_BUILD_Y) return;
     this.blocks.set(key(position.x, position.y, position.z), type);
   }
 
@@ -78,13 +89,44 @@ export class VoxelWorld {
   }
 
   topY(x: number, z: number): number {
-    for (let y = 24; y >= 0; y -= 1) if (this.isSolid(x, y, z)) return y;
+    for (let y = MAX_BUILD_Y; y >= 0; y -= 1) if (this.isSolid(x, y, z)) return y;
     return -1;
   }
 
   /** The mathematical chunk containing a world coordinate. */
   chunkAt(value: number): number {
     return Math.floor(value / CHUNK_SIZE);
+  }
+
+  /**
+   * Stream terrain around a world position. Returns true when any new chunk was generated
+   * (callers should rebuild meshes).
+   */
+  ensureAround(worldX: number, worldZ: number, chunkRadius = STREAM_CHUNK_RADIUS): boolean {
+    const cx = this.chunkAt(worldX);
+    const cz = this.chunkAt(worldZ);
+    let grew = false;
+    for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
+      for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
+        if (this.ensureChunk(cx + dx, cz + dz)) grew = true;
+      }
+    }
+    return grew;
+  }
+
+  /** Generate every column inside a square radius of the origin (used by constructor / tests). */
+  ensureRadius(originX: number, originZ: number, radius: number): boolean {
+    const minCx = this.chunkAt(originX - radius);
+    const maxCx = this.chunkAt(originX + radius);
+    const minCz = this.chunkAt(originZ - radius);
+    const maxCz = this.chunkAt(originZ + radius);
+    let grew = false;
+    for (let cx = minCx; cx <= maxCx; cx += 1) {
+      for (let cz = minCz; cz <= maxCz; cz += 1) {
+        if (this.ensureChunk(cx, cz)) grew = true;
+      }
+    }
+    return grew;
   }
 
   /**
@@ -119,7 +161,24 @@ export class VoxelWorld {
   static fromSnapshot(snapshot: WorldSnapshot, size = snapshot.size ?? 30): VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
+    world.generatedChunks.clear();
     snapshot.blocks.forEach(([position, type]) => world.blocks.set(position, type));
+    // Mark every chunk that has saved blocks as already generated so streaming
+    // does not overwrite player edits with fresh terrain.
+    snapshot.blocks.forEach(([position]) => {
+      const [x, , z] = position.split(",").map(Number);
+      world.generatedChunks.add(chunkKey(world.chunkAt(x), world.chunkAt(z)));
+    });
+    // Also mark the initial radius so holes outside the snapshot still stream later.
+    const minCx = world.chunkAt(-size);
+    const maxCx = world.chunkAt(size);
+    const minCz = world.chunkAt(-size);
+    const maxCz = world.chunkAt(size);
+    for (let cx = minCx; cx <= maxCx; cx += 1) {
+      for (let cz = minCz; cz <= maxCz; cz += 1) {
+        world.generatedChunks.add(chunkKey(cx, cz));
+      }
+    }
     world.villages.length = 0;
     if (snapshot.villages) world.villages.push(...snapshot.villages.map((village) => cloneVillage(village)));
     // Older local saves have no village record. Add the deterministic structure
@@ -128,60 +187,65 @@ export class VoxelWorld {
     return world;
   }
 
-  private generate(): void {
-    for (let x = -this.size; x <= this.size; x += 1) {
-      for (let z = -this.size; z <= this.size; z += 1) {
-        const profile = biomeAt(x, z, this.seed);
-        const height = this.columnHeight(x, z, profile);
-        const seaLevel = profile.seaLevel;
-        for (let y = 0; y <= height; y += 1) {
-          this.set({ x, y, z }, this.fillBlock(profile, y, height));
-        }
-        if (profile.aquatic) {
-          for (let y = height + 1; y <= seaLevel; y += 1) this.set({ x, y, z }, "water");
-        }
-        const edges = Math.abs(x) < this.size - 2 && Math.abs(z) < this.size - 2;
-        const willTree =
-          profile.id !== "desert"
-          && profile.treeThreshold < 1
-          && height >= seaLevel + 1
-          && hash(x + 99, z - 24, this.seed) > profile.treeThreshold
-          && edges;
-        if (willTree) {
-          this.addTree(x, height + 1, z);
-        } else if (
-          profile.flowerBlock
-          && profile.flowerChance !== undefined
-          && height >= seaLevel + 1
-          && hash(x + 5, z - 13, this.seed) > profile.flowerChance
-          && edges
-        ) {
-          this.set({ x, y: height + 1, z }, profile.flowerBlock);
-        }
+  /** Generate one 16×16 terrain chunk if missing. */
+  private ensureChunk(cx: number, cz: number): boolean {
+    const id = chunkKey(cx, cz);
+    if (this.generatedChunks.has(id)) return false;
+    this.generatedChunks.add(id);
+    const minX = cx * CHUNK_SIZE;
+    const minZ = cz * CHUNK_SIZE;
+    const maxX = minX + CHUNK_SIZE - 1;
+    const maxZ = minZ + CHUNK_SIZE - 1;
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
+        this.generateColumn(x, z);
       }
     }
-    this.generateVillage();
-    this.carveCaves();
-    this.scatterOres();
+    this.carveCavesInBounds(minX, maxX, minZ, maxZ);
+    this.scatterOresInBounds(minX, maxX, minZ, maxZ);
+    return true;
+  }
+
+  private generateColumn(x: number, z: number): void {
+    const profile = biomeAt(x, z, this.seed);
+    const height = this.columnHeight(x, z, profile);
+    const seaLevel = profile.seaLevel;
+    for (let y = 0; y <= height; y += 1) {
+      this.set({ x, y, z }, this.fillBlock(profile, y, height));
+    }
+    if (profile.aquatic) {
+      for (let y = height + 1; y <= seaLevel; y += 1) this.set({ x, y, z }, "water");
+    }
+    const willTree =
+      profile.id !== "desert"
+      && profile.id !== "ocean"
+      && profile.treeThreshold < 1
+      && height >= seaLevel + 1
+      && hash(x + 99, z - 24, this.seed) > profile.treeThreshold;
+    if (willTree) {
+      this.addTree(x, height + 1, z);
+    } else if (
+      profile.flowerBlock
+      && profile.flowerChance !== undefined
+      && height >= seaLevel + 1
+      && hash(x + 5, z - 13, this.seed) > profile.flowerChance
+    ) {
+      this.set({ x, y: height + 1, z }, profile.flowerBlock);
+    }
   }
 
   /**
    * Carve deterministic underground cavities and connecting tunnels out of the
-   * buried stone. Uses a seed-stable 3D-style noise and only touches blocks deep
-   * below the surface, so the above-ground terrain, biomes and villages are
-   * never disturbed and every seed reproduces the same cave network.
+   * buried stone within the given column bounds.
    */
-  private carveCaves(): void {
-    for (let x = -this.size; x <= this.size; x += 1) {
-      for (let z = -this.size; z <= this.size; z += 1) {
-        // Surface terrain sits roughly within y ∈ [0, 12]; caves open below it.
+  private carveCavesInBounds(minX: number, maxX: number, minZ: number, maxZ: number): void {
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
         for (let y = 2; y <= 9; y += 1) {
-          // Wide, winding voids from a low-frequency field.
           const cavity =
             Math.sin((x + this.seed * 0.7) * 0.31) *
             Math.cos((z - this.seed * 0.3) * 0.37) *
             Math.sin((y + this.seed) * 0.5);
-          // Intermittent short tunnels that thread between chambers.
           const tunnel =
             Math.abs(Math.sin((x * 0.9 + z * 0.5 + y * 0.7 + this.seed) * 1.35)) < 0.42 &&
             hash(x + y, z + y * 2, this.seed) > 0.42 &&
@@ -194,10 +258,6 @@ export class VoxelWorld {
     }
   }
 
-  /**
-   * True when the block below a potential cave cell is still solid stone, so
-   * caverns never open a hole straight down to bedrock/void beneath a player.
-   */
   private isSupportColumn(x: number, y: number, z: number): boolean {
     for (let below = y; below >= 1; below -= 1) {
       if (this.get(x, below, z) === "stone" || this.get(x, below, z) === "dirt") return true;
@@ -205,21 +265,13 @@ export class VoxelWorld {
     return false;
   }
 
-  /**
-   * Scatter the Phase-3 mineral ores through the buried stone, pushing the rare
-   * ones deeper. All ores are original-colour blocks embedded at deterministic
-   * positions that any mifted touch can collect through the standard drop chain.
-   */
-  private scatterOres(): void {
+  private scatterOresInBounds(minX: number, maxX: number, minZ: number, maxZ: number): void {
     const oreAt = (x: number, y: number, z: number): BlockType | undefined => {
       if (this.get(x, y, z) !== "stone") return undefined;
-      const depth = y; // y=0 is bedrock; smaller y is deeper underground
+      const depth = y;
       const roll = hash(x + 31, z - 17, this.seed + y * 7);
-      // diamond only in the lowest band, tiny chance
       if (depth <= 2 && roll < 0.012) return "diamond_ore";
-      // lapis prefers mid-deep stone (vanilla y-ish band)
       if (depth <= 5 && roll < 0.035) return "lapis_ore";
-      // redstone ore: mid band, similar frequency to lapis
       if (depth <= 6 && roll < 0.04) return "redstone_ore";
       if (depth <= 3 && roll < 0.02) return "obsidian";
       if (depth <= 4 && roll < 0.05) return "gold_ore";
@@ -228,8 +280,8 @@ export class VoxelWorld {
       if (roll < 0.26) return "coal_ore";
       return undefined;
     };
-    for (let x = -this.size; x <= this.size; x += 1) {
-      for (let z = -this.size; z <= this.size; z += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
         for (let y = 1; y <= 8; y += 1) {
           const ore = oreAt(x, y, z);
           if (ore) this.set({ x, y, z }, ore);
@@ -245,11 +297,12 @@ export class VoxelWorld {
     if (!site) return;
     const { x: centerX, z: centerZ, y: groundY } = site;
     const radius = 8;
+    // Ensure village footprint chunks exist before flattening.
+    this.ensureRadius(centerX, centerZ, radius + 2);
     for (let x = centerX - radius; x <= centerX + radius; x += 1) {
       for (let z = centerZ - radius; z <= centerZ + radius; z += 1) this.prepareVillageGround(x, z, groundY);
     }
 
-    // A brick plaza plus cross roads creates an immediately recognisable layout.
     for (let x = centerX - 2; x <= centerX + 2; x += 1) {
       for (let z = centerZ - 2; z <= centerZ + 2; z += 1) this.set({ x, y: groundY, z }, "bricks");
     }
@@ -271,7 +324,6 @@ export class VoxelWorld {
     });
   }
 
-  /** Locate a mostly plains, gently rolling site deterministically from seed. */
   private findVillageSite(): { x: number; y: number; z: number } | undefined {
     const limit = this.size - 9;
     let best: { x: number; y: number; z: number; score: number } | undefined;
@@ -287,7 +339,6 @@ export class VoxelWorld {
           high = Math.max(high, column.height);
         }
         if (!plains || high - low > 3) continue;
-        // A seed-dependent tiebreak prevents every world placing its village at 0,0.
         const score = x * x + z * z + hash(x + 17, z - 31, this.seed) * 9;
         if (!best || score < best.score) best = { x, y: Math.round((low + high) / 2), z, score };
       }
@@ -295,9 +346,8 @@ export class VoxelWorld {
     return best;
   }
 
-  /** Flatten only the generated footprint; the blocks remain normally editable. */
   private prepareVillageGround(x: number, z: number, groundY: number): void {
-    for (let y = 24; y > groundY; y -= 1) this.blocks.delete(key(x, y, z));
+    for (let y = MAX_BUILD_Y; y > groundY; y -= 1) this.blocks.delete(key(x, y, z));
     const top = this.topY(x, z);
     for (let y = Math.max(0, top + 1); y < groundY; y += 1) this.set({ x, y, z }, "dirt");
     this.set({ x, y: groundY, z }, "grass");
@@ -318,7 +368,6 @@ export class VoxelWorld {
       }
     }
     for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) this.set({ x, y: groundY + 4, z }, "wood");
-    // Wool rugs / bedding stock — sheep AI is later Phase work; villages supply wool for beds.
     this.set({ x: centerX - 1, y: groundY + 1, z: centerZ }, "wool");
     this.set({ x: centerX - 1, y: groundY + 1, z: centerZ + (entranceSide === "north" ? 1 : -1) }, "wool");
     return {
@@ -333,18 +382,14 @@ export class VoxelWorld {
     return this.villages.map((village) => cloneVillage(village));
   }
 
-  /** Deterministic terrain height for a column in the given biome. */
   private columnHeight(x: number, z: number, profile: BiomeProfile): number {
     let height = describeColumn(x, z, this.seed).height;
-    // Rocky highlands: anything above the biome's base is exposed stone.
     height = Math.max(1, height);
-    return Math.min(24, height);
+    return Math.min(MAX_BUILD_Y, height);
   }
 
-  /** Surface / subsurface / underground block distribution for a column. */
   private fillBlock(profile: BiomeProfile, y: number, height: number): BlockType {
     if (y === height) {
-      // Mountain peaks above the tree line are bare rock.
       if (profile.id === "mountains" && height >= profile.baseHeight + 1) return "stone";
       return profile.surface;
     }

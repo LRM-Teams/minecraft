@@ -12,13 +12,20 @@ import {
   type WitherBoss,
   type WitherSkull,
 } from "./wither";
-import { craftBricks, craftPlanks, createInventory, type Inventory } from "./inventory";
+import { craftBricks, craftPlanks, createInventory, createStarterInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
-import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
+import {
+  DEFAULT_HOTBAR,
+  HOTBAR_SIZE,
+  HOTBAR_TAG,
+  clampHotbarIndex,
+  hotbarTypeAt,
+} from "./hotbar";
 import { ITEM_LABELS, SWORD_DAMAGE, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
 import {
   EXHAUSTION,
@@ -161,7 +168,7 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉附魔台酿造台/睡床 · E 合成 · R 工具 · T 进食喝药 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · 左键挖掘 · 右键放置（手持方块优先）· 1–9 热键 · E 合成 · R 工具 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -190,7 +197,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置或开工作台/熔炉<br/>1–0 / 滚轮切换方块　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效 · N 下界 · B 末地 · H 凋灵</p>
+      <p class="keys">WASD / 方向键无限探索　空格跳跃　鼠标视角<br/>左键长按破坏　右键放置（持方块时优先放置，空着手交互拉杆/床）<br/>1–9 / 滚轮切换热键　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -1342,8 +1349,21 @@ const roomCodeInput = document.querySelector<HTMLInputElement>("#room-code")!;
 const playerNameInput = document.querySelector<HTMLInputElement>("#player-name")!;
 const joinRoomButton = document.querySelector<HTMLButtonElement>("#join-room")!;
 const roomStatus = document.querySelector<HTMLElement>("#room-status")!;
-let selected = saved?.player.selected ?? 0;
-let inventory: Inventory = createInventory(saved?.player.inventory);
+let selected = clampHotbarIndex(saved?.player.selected ?? 0);
+/** Mutable 9-slot hotbar bindings (wiki-recognisable placeables by default). */
+const hotbarSlots: BlockType[] = [...DEFAULT_HOTBAR];
+const heldBlock = (): BlockType => hotbarTypeAt(hotbarSlots, selected);
+const bindHotbar = (type: BlockType): void => {
+  const existing = hotbarSlots.indexOf(type);
+  if (existing >= 0) {
+    selected = existing;
+    return;
+  }
+  hotbarSlots[selected] = type;
+};
+let inventory: Inventory = saved?.player.inventory
+  ? createInventory(saved.player.inventory)
+  : createStarterInventory();
 const stations = createStations();
 const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
@@ -1435,6 +1455,11 @@ const endEntriesNear = (): { position: BlockPosition; type: EndBlockId }[] => {
 const syncRenderedChunks = (force = false): void => {
   const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+  if (dimension === "overworld") {
+    // Infinite open world: generate missing chunks around the player before mesh rebuild.
+    const grew = world.ensureAround(camera.position.x, camera.position.z, STREAM_CHUNK_RADIUS);
+    if (grew) force = true;
+  }
   if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
   if (dimension === "nether") {
     netherChunks.rebuild(netherEntriesNear());
@@ -1451,12 +1476,16 @@ syncRenderedChunks(true);
 syncDimensionState();
 
 const renderHotbar = (): void => {
-  hotbar.innerHTML = BLOCK_TYPES.map((type, index) => {
-    const keyLabel = index === 9 ? "0" : index + 1;
-    return `<div class="slot ${index === selected ? "selected" : ""}">${keyLabel}<span class="swatch ${type}"></span><small>${inventory[type]}</small></div>`;
+  hotbar.innerHTML = hotbarSlots.map((type, index) => {
+    const count = inventory[type] ?? 0;
+    const empty = count <= 0 ? " empty" : "";
+    const selectedClass = index === selected ? " selected" : "";
+    const tag = HOTBAR_TAG[type] ?? type.slice(0, 1);
+    return `<div class="slot${selectedClass}${empty}" title="${labels[type]}"><span class="key">${index + 1}</span><span class="tag">${tag}</span><span class="swatch ${type}"></span><small>${count}</small></div>`;
   }).join("");
+  const type = heldBlock();
   const toolLabel = stations.equippedTool ? ` · 工具 ${ITEM_LABELS[stations.equippedTool]}` : "";
-  status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}${toolLabel}` : `空槽${toolLabel}`;
+  status.textContent = `${labels[type]} · ${inventory[type]}${toolLabel}`;
 };
 renderHotbar();
 
@@ -1595,7 +1624,7 @@ const toggleCodex = (): void => {
 };
 
 const finishCraft = (type: BlockType): void => {
-  selected = BLOCK_TYPES.indexOf(type);
+  bindHotbar(type);
   renderHotbar();
   dirty = true;
   persist();
@@ -1881,10 +1910,16 @@ const edit = (place: boolean): void => {
       }
     }
   } else {
-    const type = BLOCK_TYPES[selected];
-    if (!type || inventory[type] <= 0) return;
+    const type = heldBlock();
+    if (!type || inventory[type] <= 0) {
+      status.textContent = `无法放置：${labels[type] ?? "快捷栏"}数量不足（挖掘或合成获取）`;
+      return;
+    }
     const position = { x: target.position.x + target.normal.x, y: target.position.y + target.normal.y, z: target.position.z + target.normal.z };
-    if (intersectsPlayer(position)) return;
+    if (intersectsPlayer(position)) {
+      status.textContent = "不能把方块放在自己身上";
+      return;
+    }
     if (type === "bed") {
       if (!placeBedPair(world, position, yaw)) {
         status.textContent = "床需要两格空间且下方坚实";
@@ -2000,7 +2035,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   activeWorldId = slot.id;
   world = VoxelWorld.fromSnapshot(slot.save.world);
   inventory = createInventory(slot.save.player.inventory);
-  selected = Math.min(slot.save.player.selected, BLOCK_TYPES.length - 1);
+  selected = clampHotbarIndex(slot.save.player.selected);
   yaw = slot.save.player.yaw;
   pitch = slot.save.player.pitch;
   camera.position.fromArray(slot.save.player.position);
@@ -2063,7 +2098,7 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   yaw: 0,
   pitch: -0.18,
   selected: 0,
-  inventory: createInventory(),
+  inventory: createStarterInventory(),
   dimension: "overworld",
   nether: new NetherWorld(nextWorld.seed).snapshot(),
   end: new EndWorld(nextWorld.seed).snapshot(),
@@ -2176,6 +2211,10 @@ renderer.domElement.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
     if (dimension === "overworld" && target) {
       const aimed = world.get(target.position.x, target.position.y, target.position.z);
+      const holdingPlaceable = inventory[heldBlock()] > 0;
+      // When holding a placeable block, placement wins over redstone/bed toggles
+      // (fixes silent "can't place" when aiming at levers / interactive blocks).
+      if (!holdingPlaceable) {
       if (aimed === "crafting_table") {
         openTableCraft(stations, inventory);
         releasePointerForUi();
@@ -2247,11 +2286,49 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         persist();
         return;
       }
+      } else if (aimed === "crafting_table" || aimed === "furnace" || aimed === "enchanting_table" || aimed === "brewing_stand") {
+        // Still open stations even while holding blocks (vanilla: use without placing into the block).
+        if (aimed === "crafting_table") {
+          openTableCraft(stations, inventory);
+          releasePointerForUi();
+          refreshStationsUi();
+          status.textContent = "工作台已打开";
+          return;
+        }
+        if (aimed === "furnace") {
+          const key = `${target.position.x},${target.position.y},${target.position.z}`;
+          openFurnaceAt(stations, inventory, key);
+          releasePointerForUi();
+          refreshStationsUi();
+          status.textContent = "熔炉已打开";
+          return;
+        }
+        if (aimed === "enchanting_table") {
+          const key = `${target.position.x},${target.position.y},${target.position.z}`;
+          const power = countBookshelfPower(
+            (x, y, z) => world.get(x, y, z),
+            target.position,
+          );
+          openEnchantAt(stations, inventory, key, world.seed ^ (target.position.x * 31 + target.position.z), power);
+          releasePointerForUi();
+          refreshStationsUi();
+          status.textContent = `附魔台已打开 · 书架能量 ${power}/15`;
+          return;
+        }
+        if (aimed === "brewing_stand") {
+          const key = `${target.position.x},${target.position.y},${target.position.z}`;
+          openBrewAt(stations, inventory, key);
+          releasePointerForUi();
+          refreshStationsUi();
+          status.textContent = "酿造台已打开";
+          return;
+        }
+      }
     }
     const nearVillager = villagers.find((v) =>
       !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange,
     );
-    if (nearVillager) {
+    if (nearVillager && inventory[heldBlock()] <= 0) {
       interactVillager();
       return;
     }
@@ -2275,8 +2352,8 @@ document.addEventListener("mousemove", (event) => {
 document.addEventListener("keydown", (event) => {
   keys.add(event.code);
   if (event.code === "Space") event.preventDefault();
-  const slot = event.code === "Digit0" ? 9 : event.code.startsWith("Digit") ? Number(event.code.slice(5)) - 1 : -1;
-  if (slot >= 0 && slot < BLOCK_TYPES.length) { selected = slot; renderHotbar(); dirty = true; }
+  const slot = event.code === "Digit0" ? -1 : event.code.startsWith("Digit") ? Number(event.code.slice(5)) - 1 : -1;
+  if (slot >= 0 && slot < HOTBAR_SIZE) { selected = slot; renderHotbar(); dirty = true; }
   if (event.code === "KeyC" && !event.repeat) {
     soundscape.unlock();
     if (craftPlanks(inventory)) {
@@ -2370,7 +2447,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("keyup", (event) => keys.delete(event.code));
 document.addEventListener("wheel", (event) => {
   if (document.pointerLockElement !== renderer.domElement) return;
-  selected = (selected + (event.deltaY > 0 ? 1 : -1) + BLOCK_TYPES.length) % BLOCK_TYPES.length;
+  selected = clampHotbarIndex(selected + (event.deltaY > 0 ? 1 : -1));
   renderHotbar();
 }, { passive: true });
 resetButton.addEventListener("click", () => {
@@ -2406,15 +2483,20 @@ const updatePlayer = (delta: number): void => {
   }
   if (effectTick.changed) renderEffects();
   const speed = (wantSprint ? 8 : 4.4) * effectTick.speedMul;
-  const size = currentSize();
   const prevX = camera.position.x;
   const prevZ = camera.position.z;
   if (inputX || inputZ) {
     const length = Math.hypot(inputX, inputZ);
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
     const sideX = Math.cos(yaw), sideZ = -Math.sin(yaw);
-    const nextX = THREE.MathUtils.clamp(camera.position.x + (forwardX * inputZ + sideX * inputX) / length * speed * delta, -size + 1, size - 1);
-    const nextZ = THREE.MathUtils.clamp(camera.position.z + (forwardZ * inputZ + sideZ * inputX) / length * speed * delta, -size + 1, size - 1);
+    // Overworld is infinite (chunk-streamed). Nether/End keep their finite bounds.
+    let nextX = camera.position.x + (forwardX * inputZ + sideX * inputX) / length * speed * delta;
+    let nextZ = camera.position.z + (forwardZ * inputZ + sideZ * inputX) / length * speed * delta;
+    if (dimension !== "overworld") {
+      const size = currentSize();
+      nextX = THREE.MathUtils.clamp(nextX, -size + 1, size - 1);
+      nextZ = THREE.MathUtils.clamp(nextZ, -size + 1, size - 1);
+    }
     const nextGround = currentTopY(Math.round(nextX), Math.round(nextZ)) + 1.72;
     if (nextGround <= camera.position.y + 0.85) { camera.position.x = nextX; camera.position.z = nextZ; }
   }
@@ -2511,7 +2593,7 @@ const updateVillagersLoop = (delta: number): void => {
 
 /** Interaction 2 — barter the selected hotbar block with a nearby villager. */
 const interactVillager = (): void => {
-  const type = BLOCK_TYPES[selected];
+  const type = heldBlock();
   if (!type) return;
   const targetVillager = villagers.find((v) =>
     !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange,
