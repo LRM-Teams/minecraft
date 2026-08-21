@@ -50,7 +50,7 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     terrainReceiveShadow: false,
     maxTorchLights: 4,
     torchSearchRadius: 18,
-    torchSyncEveryMs: 160,
+    torchSyncEveryMs: 200,
     maxPixelRatio: 1.25,
   },
   balanced: {
@@ -67,7 +67,7 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     terrainReceiveShadow: false,
     maxTorchLights: 6,
     torchSearchRadius: 22,
-    torchSyncEveryMs: 120,
+    torchSyncEveryMs: 180,
     maxPixelRatio: 1.5,
   },
   quality: {
@@ -84,7 +84,7 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     terrainReceiveShadow: true,
     maxTorchLights: 14,
     torchSearchRadius: 28,
-    torchSyncEveryMs: 80,
+    torchSyncEveryMs: 100,
     maxPixelRatio: 2,
   },
 };

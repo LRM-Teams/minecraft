@@ -32,6 +32,16 @@ const NEIGHBORS: BlockPosition[] = [
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
 const chunkKey = (cx: number, cz: number) => `${cx},${cz}`;
+/** Faster than `split(",").map(Number)` on hot meshing paths. */
+const parsePositionKey = (positionKey: string): BlockPosition => {
+  const c1 = positionKey.indexOf(",");
+  const c2 = positionKey.indexOf(",", c1 + 1);
+  return {
+    x: Number(positionKey.slice(0, c1)),
+    y: Number(positionKey.slice(c1 + 1, c2)),
+    z: Number(positionKey.slice(c2 + 1)),
+  };
+};
 const hash = (x: number, z: number, seed: number) => {
   const value = Math.sin(x * 12.9898 + z * 78.233 + seed * 0.12345) * 43758.5453;
   return value - Math.floor(value);
@@ -66,6 +76,8 @@ export class VoxelWorld {
   private readonly generatedChunks = new Set<string>();
   /** Position keys (`x,y,z`) indexed by chunk — speeds per-chunk meshing. */
   private readonly blocksByChunk = new Map<string, Set<string>>();
+  /** Torch cell keys — keeps lighting queries O(torches) instead of O(world). */
+  private readonly torchKeys = new Set<string>();
 
   constructor(seed = 72831, size = 48) {
     this.seed = seed;
@@ -73,6 +85,11 @@ export class VoxelWorld {
     // Eager spawn ring only (3×3 chunks). Rest streams via ensureAround with a budget.
     this.ensureAround(0, 0, 1);
     this.generateVillage();
+  }
+
+  /** All placed torch position keys (`x,y,z`). */
+  torchKeySet(): ReadonlySet<string> {
+    return this.torchKeys;
   }
 
   /** First village convenience view for UI callers (undefined when no plains fit). */
@@ -95,7 +112,10 @@ export class VoxelWorld {
   set(position: BlockPosition, type: BlockType): void {
     if (position.y < 0 || position.y > MAX_BUILD_Y) return;
     const pk = key(position.x, position.y, position.z);
+    const previous = this.blocks.get(pk);
+    if (previous === "torch") this.torchKeys.delete(pk);
     this.blocks.set(pk, type);
+    if (type === "torch") this.torchKeys.add(pk);
     this.indexBlock(position.x, position.z, pk, true);
   }
 
@@ -104,6 +124,7 @@ export class VoxelWorld {
     const block = this.blocks.get(pk);
     if (block) {
       this.blocks.delete(pk);
+      if (block === "torch") this.torchKeys.delete(pk);
       this.indexBlock(position.x, position.z, pk, false);
     }
     return block;
@@ -127,7 +148,9 @@ export class VoxelWorld {
   /** Clear a cell without returning the prior type (village flatten / door clear). */
   private clearAt(x: number, y: number, z: number): void {
     const pk = key(x, y, z);
+    const previous = this.blocks.get(pk);
     if (!this.blocks.delete(pk)) return;
+    if (previous === "torch") this.torchKeys.delete(pk);
     this.indexBlock(x, z, pk, false);
   }
 
@@ -216,8 +239,10 @@ export class VoxelWorld {
     for (const positionKey of indexed) {
       const type = this.blocks.get(positionKey);
       if (!type) continue;
-      const [x, y, z] = positionKey.split(",").map(Number);
-      if (this.isExposed(x, y, z, type)) visible.push({ position: { x, y, z }, type });
+      const position = parsePositionKey(positionKey);
+      if (this.isExposed(position.x, position.y, position.z, type)) {
+        visible.push({ position, type });
+      }
     }
     return visible;
   }
@@ -260,6 +285,7 @@ export class VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
     world.blocksByChunk.clear();
+    world.torchKeys.clear();
     world.generatedChunks.clear();
     world.openDoors.clear();
     snapshot.blocks.forEach(([position, type]) => {

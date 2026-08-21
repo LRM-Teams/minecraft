@@ -102,9 +102,13 @@ describe("torch placement & lighting queries", () => {
     const y = world.topY(0, 0) + 1;
     world.set({ x: 0, y, z: 0 }, "torch");
     world.set({ x: 4, y, z: 0 }, "torch");
+    expect(world.torchKeySet().size).toBe(2);
     const near = torchesNear(world, { x: 0, y, z: 0 }, 20);
     expect(near[0]).toEqual({ x: 0, y, z: 0 });
     expect(near.some((p) => p.x === 4)).toBe(true);
+    world.remove({ x: 0, y, z: 0 });
+    expect(world.torchKeySet().size).toBe(1);
+    expect(torchesNear(world, { x: 0, y, z: 0 }, 20)).toEqual([{ x: 4, y, z: 0 }]);
   });
 
   it("treats torch as non-solid so topY ignores it", () => {
