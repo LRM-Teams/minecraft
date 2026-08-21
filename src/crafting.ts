@@ -135,6 +135,13 @@ export const RECIPES: readonly Recipe[] = [
     ],
     result: { item: "bed", count: 1 },
   },
+  // Vanilla bread: three wheat in a row (crafting table).
+  {
+    id: "bread",
+    width: 3,
+    pattern: [cell("wheat"), cell("wheat"), cell("wheat")],
+    result: { item: "bread", count: 1 },
+  },
   ...toolSet("wooden", "planks"),
   ...toolSet("stone", "stone"),
   ...toolSet("iron", "iron_ingot"),
@@ -305,4 +312,4 @@ export const recipeNeedsTable = (recipe: Recipe): boolean => {
   return recipe.width > 2 || height > 2;
 };
 
-export const isToolItem = (item: ItemType): boolean => isExtraItem(item) && !["stick", "coal", "charcoal", "iron_ingot", "gold_ingot", "copper_ingot", "diamond"].includes(item);
+export const isToolItem = (item: ItemType): boolean => isExtraItem(item) && !["stick", "coal", "charcoal", "iron_ingot", "gold_ingot", "copper_ingot", "diamond", "wheat", "apple", "bread", "raw_beef", "cooked_beef"].includes(item);

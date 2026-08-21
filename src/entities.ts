@@ -1,4 +1,5 @@
 import type { BlockType, VoxelWorld } from "./world";
+import type { ItemType } from "./items";
 
 /**
  * Hostile voxel entities (walking "mob"). Pure logic — no THREE import, no
@@ -56,7 +57,7 @@ export interface EntityFrameResult {
   /** Mobs that died this frame (mostly informative; never mutate them after). */
   deaths: Mob[];
   /** Blocks dropped by mobs that died this frame. */
-  drops: BlockType[];
+  drops: ItemType[];
 }
 
 type MobStats = Required<Omit<MobSpec, "kind">>;
@@ -72,15 +73,15 @@ const KIND_DEFAULTS: Record<MobKind, MobStats> = {
   raider: { hp: 14, speed: 2.6, aggroRange: 9, giveUpRange: 14, reach: 0.8, damage: 1.5, attackCooldown: 1.1 },
 };
 
-const DROPS: Record<MobKind, readonly BlockType[]> = {
+const DROPS: Record<MobKind, readonly ItemType[]> = {
   stalker: ["dirt", "stone"],
-  brute: ["stone", "bricks"],
+  brute: ["raw_beef", "stone"],
   wisp: ["sand", "glass"],
   raider: ["stone", "planks"],
 };
 
 /** Possible single-block rewards for the given original enemy variety. */
-export const mobDropCandidates = (kind: MobKind): readonly BlockType[] => DROPS[kind];
+export const mobDropCandidates = (kind: MobKind): readonly ItemType[] => DROPS[kind];
 
 /** Stand a mob on the ground of a world column: body occupies the cell just above the top solid block. */
 function groundY(world: VoxelWorld, x: number, z: number): number {

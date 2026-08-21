@@ -19,6 +19,7 @@ export const SMELT_RECIPES: readonly SmeltRecipe[] = [
   { id: "diamond", input: "diamond_ore", output: "diamond", duration: 10 },
   { id: "glass", input: "sand", output: "glass", duration: 10 },
   { id: "charcoal", input: "wood", output: "charcoal", duration: 10 },
+  { id: "cooked_beef", input: "raw_beef", output: "cooked_beef", duration: 10 },
 ];
 
 export const FUELS: readonly FuelEntry[] = [

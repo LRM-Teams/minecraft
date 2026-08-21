@@ -27,6 +27,8 @@ export type PlayerSave = {
   spawnPoint?: [number, number, number];
   /** Persisted day-cycle phase within one DAY_LENGTH_MS. */
   dayPhaseMs?: number;
+  /** Optional hunger bar (food / saturation / exhaustion). */
+  hunger?: { foodLevel?: number; saturation?: number; exhaustion?: number };
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
