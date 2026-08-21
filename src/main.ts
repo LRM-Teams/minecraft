@@ -84,12 +84,9 @@ import {
   type ActiveEffect,
 } from "./brewing";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
-import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
-import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
+import { breakBedAt, hostileWithinSleepRange, trySleepInBed } from "./bed";
+import { TORCH_LIGHT, torchesNear } from "./torch";
 import {
-  canPlaceRedstoneDeviceAt,
-  canPlaceRedstoneDustAt,
-  canPlaceRedstoneLampAt,
   clearLeverAt,
   computeRedstoneNetwork,
   createLeverStates,
@@ -101,6 +98,7 @@ import {
   wirePowerAt,
   type LeverStates,
 } from "./redstone";
+import { tryPlaceBlock } from "./place";
 import {
   activeBrewingStand,
   activeFurnace,
@@ -1843,7 +1841,10 @@ const intersectsPlayer = (position: BlockPosition): boolean => {
 };
 
 const edit = (place: boolean): void => {
-  if (!target) return;
+  if (!target) {
+    if (place) status.textContent = "对准方块表面再右键放置";
+    return;
+  }
   if (dimension === "end") {
     // End edits are local to the End sub-world (mine crystals / terrain only).
     if (place) { status.textContent = "末地中无法放置主世界方块"; return; }
@@ -1911,63 +1912,18 @@ const edit = (place: boolean): void => {
     }
   } else {
     const type = heldBlock();
-    if (!type || inventory[type] <= 0) {
-      status.textContent = `无法放置：${labels[type] ?? "快捷栏"}数量不足（挖掘或合成获取）`;
+    const result = tryPlaceBlock(world, type, inventory[type] ?? 0, target, {
+      yaw,
+      intersectsPlayer,
+      labelFor: (block) => labels[block],
+    });
+    if (!result.ok) {
+      status.textContent = result.message;
       return;
     }
-    const position = { x: target.position.x + target.normal.x, y: target.position.y + target.normal.y, z: target.position.z + target.normal.z };
-    if (intersectsPlayer(position)) {
-      status.textContent = "不能把方块放在自己身上";
-      return;
-    }
-    if (type === "bed") {
-      if (!placeBedPair(world, position, yaw)) {
-        status.textContent = "床需要两格空间且下方坚实";
-        return;
-      }
-      inventory.bed -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    } else if (type === "torch") {
-      if (!canPlaceTorchAt(world, position, target.position)) {
-        status.textContent = "火把需要附着在坚实方块上";
-        return;
-      }
-      world.set(position, "torch");
-      inventory.torch -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    } else if (type === "redstone_dust") {
-      if (!canPlaceRedstoneDustAt(world, position)) {
-        status.textContent = "红石粉需要放在坚实方块上方";
-        return;
-      }
-      world.set(position, "redstone_dust");
-      inventory.redstone_dust -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    } else if (type === "lever" || type === "redstone_torch") {
-      if (!canPlaceRedstoneDeviceAt(world, position, target.position)) {
-        status.textContent = `${labels[type]}需要附着在坚实方块上`;
-        return;
-      }
-      world.set(position, type);
-      inventory[type] -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    } else if (type === "redstone_lamp") {
-      if (!canPlaceRedstoneLampAt(world, position)) return;
-      world.set(position, "redstone_lamp");
-      inventory.redstone_lamp -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    } else {
-      if (world.get(position.x, position.y, position.z)) return;
-      world.set(position, type);
-      inventory[type] -= 1;
-      soundscape.play("place");
-      room?.sendEdit({ action: "place", position, type });
-    }
+    inventory[result.type] -= 1;
+    soundscape.play("place");
+    room?.sendEdit({ action: "place", position: result.position, type: result.type });
   }
   syncTorchLights();
   refreshWorld();

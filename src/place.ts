@@ -19,9 +19,11 @@ export const BLOCK_INTERACT_TYPES = [
 
 export type BlockInteractType = (typeof BLOCK_INTERACT_TYPES)[number];
 
-export const EMPTY_HOTBAR_PLACE_MESSAGE = "空槽无法放置 · 选择有方块的热键";
 export const OCCUPIED_PLACE_MESSAGE = "此处无法放置";
-export const PLAYER_BLOCKING_PLACE_MESSAGE = "不能放在自己身上";
+export const PLAYER_BLOCKING_PLACE_MESSAGE = "不能把方块放在自己身上";
+
+export const emptyHotbarPlaceMessage = (label?: string): string =>
+  `无法放置：${label ?? "快捷栏"}数量不足（挖掘或合成获取）`;
 
 export const isBlockInteractTarget = (
   type: BlockType | undefined,
@@ -31,6 +33,7 @@ export const isBlockInteractTarget = (
 /**
  * Empty hotbar (count ≤ 0) keeps station / lever / bed use.
  * Holding a placeable block prefers placing against that face instead.
+ * Station UIs may still open while holding (handled by the caller).
  */
 export const preferBlockInteract = (
   heldCount: number,
@@ -73,7 +76,10 @@ export const tryPlaceBlock = (
   options: PlaceOptions,
 ): PlaceResult => {
   if (!type || heldCount <= 0) {
-    return { ok: false, message: EMPTY_HOTBAR_PLACE_MESSAGE };
+    return {
+      ok: false,
+      message: emptyHotbarPlaceMessage(type ? options.labelFor(type) : undefined),
+    };
   }
   if (!hit) {
     return { ok: false, message: "没有可附着的表面" };
