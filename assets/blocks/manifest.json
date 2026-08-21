@@ -1,0 +1,206 @@
+{
+  "version": 1,
+  "issue": "LRM-1603",
+  "size": 16,
+  "license": "cc0-original-procedural",
+  "directory": "assets/blocks",
+  "naming": "{blockId}_{face}.png",
+  "faces": [
+    "top",
+    "bottom",
+    "side"
+  ],
+  "engine_hint": {
+    "box_material_order": [
+      "+x",
+      "-x",
+      "+y",
+      "-y",
+      "+z",
+      "-z"
+    ],
+    "note": "THREE.BoxGeometry groups are +x -x +y -y +z -z. World meshes must load these face maps — never iconFor() / wiki isometric / HUD icons. HUD may keep assets/icons/cache/distributable. cobblestone is delivered even if BLOCK_TYPES does not yet include it."
+  },
+  "blocks": {
+    "grass": {
+      "top": "grass_top.png",
+      "bottom": "grass_bottom.png",
+      "side": "grass_side.png",
+      "semantics": {
+        "top": "草皮顶面（生物群系可染色）",
+        "side": "上缘草皮 + 下缘泥土，不可整面铺草",
+        "bottom": "泥土底面（与 dirt 同族，独立文件）"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "dirt": {
+      "top": "dirt_top.png",
+      "bottom": "dirt_bottom.png",
+      "side": "dirt_side.png",
+      "semantics": {
+        "top": "泥土顶（略密实）",
+        "side": "泥土侧（略松、小石子）",
+        "bottom": "泥土底（略深）"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "stone": {
+      "top": "stone_top.png",
+      "bottom": "stone_bottom.png",
+      "side": "stone_side.png",
+      "semantics": {
+        "top": "光滑灰岩顶",
+        "side": "带竖向裂纹的岩壁",
+        "bottom": "略深的岩底"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "wood": {
+      "top": "wood_top.png",
+      "bottom": "wood_bottom.png",
+      "side": "wood_side.png",
+      "semantics": {
+        "top": "年轮横切（髓心 + 同心环）",
+        "side": "树皮纵纹（四侧共用）",
+        "bottom": "年轮横切（略深、独立于顶）"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "planks": {
+      "top": "planks_top.png",
+      "bottom": "planks_bottom.png",
+      "side": "planks_side.png",
+      "semantics": {
+        "top": "横向木板顶",
+        "side": "横向木板侧（接缝错位）",
+        "bottom": "略深木板底"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "sand": {
+      "top": "sand_top.png",
+      "bottom": "sand_bottom.png",
+      "side": "sand_side.png",
+      "semantics": {
+        "top": "细沙粒顶",
+        "side": "沙壁（略有层理）",
+        "bottom": "略深沙底"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "leaves": {
+      "top": "leaves_top.png",
+      "bottom": "leaves_bottom.png",
+      "side": "leaves_side.png",
+      "semantics": {
+        "top": "叶片簇 + 透明孔隙（受光）",
+        "side": "叶片簇 + 透明孔隙",
+        "bottom": "叶片簇（背光、更暗）"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "water": {
+      "top": "water_top.png",
+      "bottom": "water_bottom.png",
+      "side": "water_side.png",
+      "semantics": {
+        "top": "静水面涟漪",
+        "side": "竖直水体/流纹",
+        "bottom": "深水底"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "cobblestone": {
+      "top": "cobblestone_top.png",
+      "bottom": "cobblestone_bottom.png",
+      "side": "cobblestone_side.png",
+      "semantics": {
+        "top": "圆石顶（不规则石块 + 暗缝）",
+        "side": "圆石侧（另一套石块布局）",
+        "bottom": "圆石底"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "bricks": {
+      "top": "bricks_top.png",
+      "bottom": "bricks_bottom.png",
+      "side": "bricks_side.png",
+      "semantics": {
+        "top": "砌砖顶（顺砖）",
+        "side": "砌砖侧（错缝跑砌）",
+        "bottom": "砌砖底（略深砂浆）"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    }
+  }
+}
