@@ -17,7 +17,7 @@ import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
-import { CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import {
   DEFAULT_HOTBAR,
@@ -27,6 +27,7 @@ import {
   hotbarTypeAt,
 } from "./hotbar";
 import { ITEM_LABELS, SWORD_DAMAGE, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
+import { iconFor, iconLabel } from "./icons";
 import {
   EXHAUSTION,
   FOOD_DEFS,
@@ -166,6 +167,7 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
+    <div id="held-icon" aria-hidden="true"></div>
     <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · 左键挖掘 · 右键放置（手持方块优先）· 1–9 热键 · E 合成 · R 工具 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
@@ -363,11 +365,15 @@ const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
 };
 
 type BlockFace = "side" | "top" | "bottom";
-const textureCache = new Map<string, THREE.CanvasTexture>();
+const textureCache = new Map<string, THREE.Texture>();
+/** Wiki / catalog icons for in-world block faces (restricted = preview-only bucket). */
+const wikiBlockMaps = new Map<BlockType, THREE.Texture>();
 const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
 
 /** Build original 16px textures at runtime, keeping the game asset-free and crisp at every scale. */
-const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTexture => {
+const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture => {
+  const wiki = wikiBlockMaps.get(type);
+  if (wiki) return wiki;
   const cacheKey = `${type}-${face}`;
   const cached = textureCache.get(cacheKey);
   if (cached) return cached;
@@ -1324,6 +1330,7 @@ scene.add(selection);
 const startScreen = document.querySelector<HTMLDivElement>("#start-screen")!;
 const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
+const heldIcon = document.querySelector<HTMLDivElement>("#held-icon")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
@@ -1479,13 +1486,55 @@ const renderHotbar = (): void => {
     const empty = count <= 0 ? " empty" : "";
     const selectedClass = index === selected ? " selected" : "";
     const tag = HOTBAR_TAG[type] ?? type.slice(0, 1);
-    return `<div class="slot${selectedClass}${empty}" title="${labels[type]}"><span class="key">${index + 1}</span><span class="tag">${tag}</span><span class="swatch ${type}"></span><small>${count}</small></div>`;
+    const title = iconLabel(type, labels[type]);
+    const src = iconFor(type);
+    const face = src
+      ? `<img class="icon" src="${src}" alt="${title}" draggable="false" />`
+      : `<span class="swatch ${type}"></span>`;
+    return `<div class="slot${selectedClass}${empty}" title="${title}"><span class="key">${index + 1}</span><span class="tag">${tag}</span>${face}<small>${count}</small></div>`;
   }).join("");
   const type = heldBlock();
   const toolLabel = stations.equippedTool ? ` · 工具 ${ITEM_LABELS[stations.equippedTool]}` : "";
-  status.textContent = `${labels[type]} · ${inventory[type]}${toolLabel}`;
+  status.textContent = `${iconLabel(type, labels[type])} · ${inventory[type]}${toolLabel}`;
+  const heldSrc = iconFor(type);
+  heldIcon.innerHTML = heldSrc
+    ? `<img src="${heldSrc}" alt="${iconLabel(type, labels[type])}" draggable="false" />`
+    : "";
+  heldIcon.classList.toggle("empty", !heldSrc || (inventory[type] ?? 0) <= 0);
 };
 renderHotbar();
+
+/** Preview-only: load wiki-restricted icons onto block faces (stay out of cache/distributable). */
+const beginWikiBlockMaps = (): void => {
+  const loader = new THREE.TextureLoader();
+  let pending = 0;
+  let settled = 0;
+  const maybeRefresh = (): void => {
+    settled += 1;
+    if (settled === pending) {
+      textureCache.clear();
+      syncRenderedChunks(true);
+    }
+  };
+  for (const type of BLOCK_TYPES) {
+    const src = iconFor(type);
+    if (!src) continue;
+    pending += 1;
+    loader.load(
+      src,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        wikiBlockMaps.set(type, tex);
+        maybeRefresh();
+      },
+      undefined,
+      () => maybeRefresh(),
+    );
+  }
+};
+beginWikiBlockMaps();
 
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 

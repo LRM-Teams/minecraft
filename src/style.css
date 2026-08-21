@@ -26,6 +26,18 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .wither-bar { width: 100%; height: 8px; border: 2px solid #2c3339; background: #1a101c; margin-bottom: 3px; border-radius: 2px; }
 .wither-fill { height: 100%; background: linear-gradient(90deg, #7a1fa0, #c12bc8); transition: width .12s linear; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: 28px; font-weight: 300; }
+#held-icon {
+  position: absolute;
+  top: calc(50% + 28px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+#held-icon.empty { opacity: .35; }
+#held-icon img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
 #hint { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; color: #edf7ff; opacity: .9; }
 #status { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%); min-width: 120px; text-align: center; color: #fff7c9; font-size: 12px; }
 #hotbar { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; }
@@ -35,6 +47,14 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .slot .key { position: absolute; top: 2px; left: 4px; font-size: 9px; color: #9aa7a4; }
 .slot .tag { position: absolute; top: 2px; right: 3px; font-size: 9px; font-weight: 700; color: #fff7c9; text-shadow: 1px 1px 0 #182029; letter-spacing: 0; }
 .slot small { position: absolute; bottom: 3px; right: 5px; font-size: 10px; color: white; }
+.slot .icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.25);
+}
 .swatch { width: 26px; height: 26px; border: 2px solid rgba(255,255,255,.28); box-shadow: inset -4px -4px rgba(0,0,0,.18); image-rendering: pixelated; }
 /* Wiki-aligned swatch palette — every placeable type must be visually distinct. */
 .swatch.grass { background: linear-gradient(180deg, #5f9f47 0 42%, #8c633f 42% 100%); }
