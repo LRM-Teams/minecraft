@@ -101,7 +101,7 @@ describe("Mob combat", () => {
 
   it("uses a distinct drop table for each variety (brute yields raw beef)", () => {
     expect(mobDropCandidates("stalker")).toEqual(["dirt", "stone"]);
-    expect(mobDropCandidates("brute")).toEqual(["raw_beef", "stone"]);
+    expect(mobDropCandidates("brute")).toEqual(["raw_beef", "leather", "stone"]);
     expect(mobDropCandidates("wisp")).toEqual(["sand", "glass"]);
   });
 });

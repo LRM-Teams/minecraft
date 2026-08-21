@@ -39,6 +39,15 @@ export const EXTRA_ITEMS = [
   "bread",
   "raw_beef",
   "cooked_beef",
+  "leather",
+  "leather_helmet",
+  "leather_chestplate",
+  "leather_leggings",
+  "leather_boots",
+  "iron_helmet",
+  "iron_chestplate",
+  "iron_leggings",
+  "iron_boots",
 ] as const;
 
 export type ExtraItem = (typeof EXTRA_ITEMS)[number];
@@ -69,6 +78,15 @@ export const isHoe = (item: ItemType | undefined): boolean =>
 
 export const isTool = (item: ItemType | undefined): boolean =>
   isPickaxe(item) || isAxe(item) || isShovel(item) || isSword(item) || isHoe(item);
+
+export const isArmor = (item: ItemType | undefined): boolean =>
+  Boolean(
+    item &&
+      (item.endsWith("_helmet") ||
+        item.endsWith("_chestplate") ||
+        item.endsWith("_leggings") ||
+        item.endsWith("_boots")),
+  );
 
 /** Minecraft-ish mining speed multipliers by tool tier (hand = 1). */
 export const TOOL_SPEED: Partial<Record<ExtraItem, number>> = {
@@ -156,4 +174,13 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   bread: "面包",
   raw_beef: "生牛肉",
   cooked_beef: "熟牛排",
+  leather: "皮革",
+  leather_helmet: "皮革头盔",
+  leather_chestplate: "皮革胸甲",
+  leather_leggings: "皮革护腿",
+  leather_boots: "皮革靴子",
+  iron_helmet: "铁头盔",
+  iron_chestplate: "铁胸甲",
+  iron_leggings: "铁护腿",
+  iron_boots: "铁靴子",
 };

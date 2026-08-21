@@ -2,6 +2,7 @@ import { VoxelWorld, type WorldSnapshot } from "./world";
 import type { NetherSnapshot } from "./nether";
 import type { EndSnapshot } from "./end";
 import type { Inventory } from "./inventory";
+import type { ArmorSave } from "./armor";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
@@ -29,6 +30,8 @@ export type PlayerSave = {
   dayPhaseMs?: number;
   /** Optional hunger bar (food / saturation / exhaustion). */
   hunger?: { foodLevel?: number; saturation?: number; exhaustion?: number };
+  /** Optional equipped armor slots (helmet / chest / legs / boots). */
+  armor?: ArmorSave;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };
