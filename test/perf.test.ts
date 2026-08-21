@@ -18,6 +18,7 @@ describe("perf presets (LRM-1613)", () => {
     expect(cfg.maxChunkBuildsPerFrame).toBeGreaterThan(0);
     expect(cfg.maxChunkGensPerFrame).toBeGreaterThan(0);
     expect(cfg.meshChunkRadius).toBeLessThanOrEqual(cfg.streamChunkRadius);
+    expect(cfg.meshChunkRadius).toBeLessThanOrEqual(1);
     expect(cfg.torchSyncEveryMs).toBeGreaterThan(0);
   });
 
