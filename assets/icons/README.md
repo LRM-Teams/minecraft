@@ -1,5 +1,7 @@
 # assets/icons
 
+HUD / hotbar only. World cube faces live in `assets/blocks/` (LRM-1603) — do not paste these icons onto mesh faces.
+
 ## Ship / Pages (canonical)
 
 ```bash
