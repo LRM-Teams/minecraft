@@ -1,6 +1,6 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "crafting_table", "furnace", "torch", "wool", "bed"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "torch", "wool", "bed"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 /** Blocks that do not occlude neighbours or block movement (torch is a thin fixture). */
@@ -217,6 +217,9 @@ export class VoxelWorld {
       const roll = hash(x + 31, z - 17, this.seed + y * 7);
       // diamond only in the lowest band, tiny chance
       if (depth <= 2 && roll < 0.012) return "diamond_ore";
+      // lapis prefers mid-deep stone (vanilla y-ish band)
+      if (depth <= 5 && roll < 0.035) return "lapis_ore";
+      if (depth <= 3 && roll < 0.02) return "obsidian";
       if (depth <= 4 && roll < 0.05) return "gold_ore";
       if (depth <= 6 && roll < 0.11) return "iron_ore";
       if (depth <= 8 && roll < 0.18) return "copper_ore";

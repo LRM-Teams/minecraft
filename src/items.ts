@@ -48,6 +48,10 @@ export const EXTRA_ITEMS = [
   "iron_chestplate",
   "iron_leggings",
   "iron_boots",
+  "lapis_lazuli",
+  "sugar_cane",
+  "paper",
+  "book",
 ] as const;
 
 export type ExtraItem = (typeof EXTRA_ITEMS)[number];
@@ -134,6 +138,10 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   diamond_ore: "钻石矿石",
   crafting_table: "工作台",
   furnace: "熔炉",
+  enchanting_table: "附魔台",
+  bookshelf: "书架",
+  lapis_ore: "青金石矿",
+  obsidian: "黑曜石",
   torch: "火把",
   wool: "羊毛",
   bed: "床",
@@ -144,6 +152,10 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   gold_ingot: "金锭",
   copper_ingot: "铜锭",
   diamond: "钻石",
+  lapis_lazuli: "青金石",
+  sugar_cane: "甘蔗",
+  paper: "纸",
+  book: "书",
   wooden_pickaxe: "木镐",
   stone_pickaxe: "石镐",
   iron_pickaxe: "铁镐",
