@@ -68,6 +68,7 @@ import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from 
 import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { BOX_FACES, type BlockFace } from "./blockFaces";
+import { beginBlockFaceAssets, blockFaceTexture } from "./blockAssets";
 import {
   createArmorState,
   formatArmorBar,
@@ -394,10 +395,11 @@ const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
 
 /**
  * Procedural 16×16 face textures for the world mesh.
- * World faces NEVER use HUD/item icons (that caused black wallpaper tiles).
- * Hotbar still uses `iconFor` separately.
+ * Prefer LRM-1603 `assets/blocks` maps when loaded; never HUD/item icons.
  */
 const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture => {
+  const asset = blockFaceTexture(type, face);
+  if (asset) return asset;
   const cacheKey = `${type}-${face}`;
   const cached = textureCache.get(cacheKey);
   if (cached) return cached;
@@ -1623,7 +1625,11 @@ const renderHotbar = (): void => {
 };
 renderHotbar();
 
-/** HUD icons stay on the hotbar; world meshes use procedural six-face textures only (LRM-1604). */
+/** HUD icons stay on the hotbar; world meshes use assets/blocks (or procedural fallback). */
+beginBlockFaceAssets(() => {
+  textureCache.clear();
+  syncRenderedChunks(true);
+});
 
 const clearDropMeshes = (): void => {
   dropMeshes.forEach((mesh) => scene.remove(mesh));
