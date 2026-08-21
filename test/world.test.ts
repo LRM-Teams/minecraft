@@ -45,6 +45,19 @@ describe("VoxelWorld", () => {
     expect(world.visibleBlocks(32, 32, 1).some(({ position }) => position.x === distant.x && position.y === distant.y && position.z === distant.z)).toBe(true);
   });
 
+  it("visibleBlocksInChunk matches radius-0 visibleBlocks for incremental meshing", () => {
+    const world = new VoxelWorld(11, 32);
+    const cx = 1;
+    const cz = -1;
+    const fromChunk = world.visibleBlocksInChunk(cx, cz);
+    const fromRadius = world.visibleBlocks(cx * 16 + 8, cz * 16 + 8, 0);
+    const keyOf = (p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`;
+    expect(new Set(fromChunk.map(({ position }) => keyOf(position)))).toEqual(
+      new Set(fromRadius.map(({ position }) => keyOf(position))),
+    );
+    expect(fromChunk.every(({ position }) => world.chunkAt(position.x) === cx && world.chunkAt(position.z) === cz)).toBe(true);
+  });
+
   it("builds a deterministic, enterable plains village with anchors for villagers", () => {
     const seed = 2026;
     const one = new VoxelWorld(seed, 48);
