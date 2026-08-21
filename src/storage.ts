@@ -23,6 +23,10 @@ export type PlayerSave = {
   endCleared?: boolean;
   /** Wither bosses defeated → Nether Stars earned (additive optional field). */
   witherStars?: number;
+  /** Bed-bound overworld respawn (camera position). */
+  spawnPoint?: [number, number, number];
+  /** Persisted day-cycle phase within one DAY_LENGTH_MS. */
+  dayPhaseMs?: number;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };

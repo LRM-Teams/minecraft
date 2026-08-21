@@ -112,40 +112,39 @@ export const RECIPES: readonly Recipe[] = [
     pattern: [cell("stone"), cell("stone"), cell("stone"), cell("stone")],
     result: { item: "bricks", count: 4 },
   },
+  // Vanilla: coal/charcoal above stick → 4 torches (2×1 shaped; works in 2×2 bag).
   {
-    id: "torch",
+    id: "torch_coal",
     width: 1,
     pattern: [cell("coal"), cell("stick")],
-    result: { item: "coal", count: 4 }, // placeholder overridden below — torches need a block; use coal+stick → 4 charcoal proxy? 
+    result: { item: "torch", count: 4 },
   },
-  // Torch: we keep coal+stick as shapeless → 4 sticks worth of light item isn't available.
-  // Instead: coal + stick → 4 "torches" represented by granting charcoal×0 — skip fake torch.
-  // Real torch block would need lighting; recipe book documents furnace fuel path.
+  {
+    id: "torch_charcoal",
+    width: 1,
+    pattern: [cell("charcoal"), cell("stick")],
+    result: { item: "torch", count: 4 },
+  },
+  // Vanilla bed: 3 wool over 3 planks (crafting table).
+  {
+    id: "bed",
+    width: 3,
+    pattern: [
+      cell("wool"), cell("wool"), cell("wool"),
+      cell("planks"), cell("planks"), cell("planks"),
+    ],
+    result: { item: "bed", count: 1 },
+  },
   ...toolSet("wooden", "planks"),
   ...toolSet("stone", "stone"),
   ...toolSet("iron", "iron_ingot"),
   ...toolSet("gold", "gold_ingot"),
   ...toolSet("diamond", "diamond"),
-  // Block of metal (storage) — 9 ingots → keep as compact craft sinks players expect.
-  {
-    id: "iron_block_sink",
-    width: 3,
-    pattern: [
-      cell("iron_ingot"), cell("iron_ingot"), cell("iron_ingot"),
-      cell("iron_ingot"), cell("iron_ingot"), cell("iron_ingot"),
-      cell("iron_ingot"), cell("iron_ingot"), cell("iron_ingot"),
-    ],
-    // No dedicated iron_block yet — craft returns iron_ingot×9 noop avoided: use bricks as intentional? Better skip.
-    result: { item: "iron_ingot", count: 9 },
-  },
 ];
 
-// Remove broken torch / iron_block_sink placeholders — keep recipe list clean.
-const CLEAN_RECIPES: Recipe[] = RECIPES.filter((recipe) => recipe.id !== "torch" && recipe.id !== "iron_block_sink");
+export const ALL_RECIPES: readonly Recipe[] = RECIPES;
 
-export { CLEAN_RECIPES as ALL_RECIPES };
-
-const ACTIVE_RECIPES: readonly Recipe[] = CLEAN_RECIPES;
+const ACTIVE_RECIPES: readonly Recipe[] = RECIPES;
 
 const gridSize = (grid: readonly CraftCell[]): number => {
   const n = grid.length;

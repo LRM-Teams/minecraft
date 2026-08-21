@@ -20,6 +20,9 @@ import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from 
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { ITEM_LABELS, SWORD_DAMAGE, isTool, type ExtraItem } from "./items";
+import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
+import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
+import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
 import {
   closeCraft,
   closeFurnace,
@@ -73,7 +76,7 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉 · E 合成 · R 工具 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉/睡床 · E 合成 · R 工具 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -81,11 +84,13 @@ app.innerHTML = `
     <aside id="codex" class="hidden">
       <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
       <p>对标原版：背包 <kbd>E</kbd> 开 2×2 合成；放置工作台后右键开 3×3；熔炉烧炼矿石/沙子。</p>
-      <p>流程：原木→木板→木棍→工作台→熔炉→烧锭→铁/金/钻工具。</p>
+      <p>流程：原木→木板→木棍→工作台→熔炉→烧锭→铁/金/钻工具；煤/木炭+木棍→火把；羊毛×3+木板×3→床。</p>
       <div class="recipe"><kbd>C</kbd> 原木 → 木板 ×4（快捷）</div>
       <div class="recipe"><kbd>V</kbd> 石头 ×4 → 石砖 ×4（快捷）</div>
       <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
-      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/村民交互。</p>
+      <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
+      <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
+      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/床/村民交互。羊毛可在村庄屋内取得。</p>
     </aside>
   </div>
   <div id="start-screen">
@@ -201,9 +206,12 @@ const colors: Record<BlockType, number> = {
   diamond_ore: 0x5ad2d0,
   crafting_table: 0xb8874c,
   furnace: 0x6a6e72,
+  torch: 0xffc15a,
+  wool: 0xf0ebe3,
+  bed: 0xc43c3c,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", crafting_table: "工作台", furnace: "熔炉",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", crafting_table: "工作台", furnace: "熔炉", torch: "火把", wool: "羊毛", bed: "床",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -283,6 +291,20 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
       paint(base.clone().multiplyScalar(0.85 + noise(x, y) * 0.3), x, y, 3, 3);
       if (noise(x + 5, y + 5) > 0.55) paint(new THREE.Color(0xffffff).multiplyScalar(0.8 + noise(x, y) * 0.25), x + 1, y, 1, 1);
     }
+  } else if (type === "torch") {
+    paint(new THREE.Color(0x5a3a22));
+    paint(new THREE.Color(0xffe08a), 5, 0, 6, 7);
+    paint(new THREE.Color(0xff7a1a), 6, 1, 4, 4);
+  } else if (type === "wool") {
+    paint(base);
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x += 4) {
+      paint(base.clone().multiplyScalar(0.88 + noise(x, y) * 0.2), x, y, 4, 4);
+    }
+  } else if (type === "bed") {
+    const wood = new THREE.Color(colors.planks);
+    paint(wood);
+    paint(base, 0, 0, 16, 9);
+    for (let x = 0; x < 16; x += 2) paint(base.clone().multiplyScalar(0.85), x, 2, 1, 5);
   } else {
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
@@ -367,11 +389,25 @@ class BlockRenderer {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
-      mesh.castShadow = type !== "leaves";
+      mesh.castShadow = type !== "leaves" && type !== "torch";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       positions.forEach((position, index) => {
-        matrix.makeTranslation(position.x, position.y, position.z);
+        if (type === "torch") {
+          matrix.compose(
+            new THREE.Vector3(position.x, position.y - 0.12, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(0.22, 0.72, 0.22),
+          );
+        } else if (type === "bed") {
+          matrix.compose(
+            new THREE.Vector3(position.x, position.y - 0.2, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(1, 0.55, 1),
+          );
+        } else {
+          matrix.makeTranslation(position.x, position.y, position.z);
+        }
         mesh.setMatrixAt(index, matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
@@ -627,12 +663,53 @@ const currentTopY = (x: number, z: number): number => {
   return world.topY(x, z);
 };
 const currentSize = (): number => dimension === "end" ? endWorld.size : dimension === "nether" ? nether.size : world.size;
+
+/** Bed-bound respawn; falls back to world spawn. */
+let bedSpawn: [number, number, number] | undefined = saved?.player.spawnPoint;
+const dayClock: DayClock = createDayClock(saved?.player.dayPhaseMs ?? 0);
+
 const respawnPoint = (): [number, number, number] => {
   if (dimension === "end") {
     const s = endSpawn();
     return [s.x, endWorld.topY(s.x, s.z) + 1.72, s.z];
   }
+  if (dimension === "overworld" && bedSpawn) return [...bedSpawn];
   return [0, currentTopY(0, 0) + 1.72, dimension === "nether" ? 4 : 8];
+};
+
+const MAX_TORCH_LIGHTS = 14;
+const torchLights: THREE.PointLight[] = [];
+for (let i = 0; i < MAX_TORCH_LIGHTS; i += 1) {
+  const light = new THREE.PointLight(TORCH_LIGHT.color, 0, TORCH_LIGHT.distance, TORCH_LIGHT.decay);
+  light.visible = false;
+  scene.add(light);
+  torchLights.push(light);
+}
+
+const syncTorchLights = (): void => {
+  if (dimension !== "overworld") {
+    torchLights.forEach((light) => { light.intensity = 0; light.visible = false; });
+    return;
+  }
+  const center = {
+    x: Math.round(camera.position.x),
+    y: Math.round(camera.position.y),
+    z: Math.round(camera.position.z),
+  };
+  const lit = torchesNear(world, center, 28).slice(0, MAX_TORCH_LIGHTS);
+  torchLights.forEach((light, index) => {
+    const torch = lit[index];
+    if (!torch) {
+      light.intensity = 0;
+      light.visible = false;
+      return;
+    }
+    light.position.set(torch.x, torch.y + 0.35, torch.z);
+    light.intensity = TORCH_LIGHT.intensity;
+    light.distance = TORCH_LIGHT.distance;
+    light.decay = TORCH_LIGHT.decay;
+    light.visible = true;
+  });
 };
 
 const applyDimensionEnvironment = (): void => {
@@ -640,10 +717,12 @@ const applyDimensionEnvironment = (): void => {
   const inEnd = dimension === "end";
   scene.background = inNether ? new THREE.Color("#3a0f16") : inEnd ? new THREE.Color("#0a0a12") : skyColor;
   fog.color.copy(inNether ? new THREE.Color("#2b070c") : inEnd ? new THREE.Color("#05050a") : skyColor);
-  sun.intensity = inNether ? 0.6 : inEnd ? 0.35 : 0.15 + ((performance.now() % 150000) / 150000) * 2.65;
+  const height = sunHeightAt(dayClock.now());
+  sun.intensity = inNether ? 0.6 : inEnd ? 0.35 : 0.15 + height * 2.65;
   daylight.color.set(inNether ? "#c96a5a" : inEnd ? "#b9b3d9" : "#d8efff");
-  daylight.intensity = inNether ? 1.5 : inEnd ? 1.1 : 2.2;
+  daylight.intensity = inNether ? 1.5 : inEnd ? 1.1 : 0.25 + height * 1.95;
   cloudGroup.visible = !inNether && !inEnd;
+  syncTorchLights();
 };
 
 const syncDimensionState = (): void => {
@@ -1302,7 +1381,20 @@ let mineHeld = false;
 let miningKey: string | undefined;
 let miningProgress = 0;
 
-const playerSave = (): PlayerSave => ({ position: camera.position.toArray() as [number, number, number], yaw, pitch, selected, inventory, dimension, nether: nether.snapshot(), end: endWorld.snapshot(), endCleared, witherStars });
+const playerSave = (): PlayerSave => ({
+  position: camera.position.toArray() as [number, number, number],
+  yaw,
+  pitch,
+  selected,
+  inventory,
+  dimension,
+  nether: nether.snapshot(),
+  end: endWorld.snapshot(),
+  endCleared,
+  witherStars,
+  spawnPoint: bedSpawn,
+  dayPhaseMs: dayClock.phaseMs(),
+});
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
     dirty = false;
@@ -1420,23 +1512,53 @@ const edit = (place: boolean): void => {
     return;
   }
   if (!place) {
-    const removed = world.remove(target.position);
-    if (removed) {
-      inventory[removed] += 1;
-      soundscape.play("break");
-      room?.sendEdit({ action: "remove", position: target.position });
+    const existing = world.get(target.position.x, target.position.y, target.position.z);
+    if (existing === "bed") {
+      const removed = breakBedAt(world, target.position);
+      if (removed) {
+        inventory[removed] += 1;
+        soundscape.play("break");
+        room?.sendEdit({ action: "remove", position: target.position });
+      }
+    } else {
+      const removed = world.remove(target.position);
+      if (removed) {
+        inventory[removed] += 1;
+        soundscape.play("break");
+        room?.sendEdit({ action: "remove", position: target.position });
+      }
     }
   } else {
     const type = BLOCK_TYPES[selected];
     if (!type || inventory[type] <= 0) return;
     const position = { x: target.position.x + target.normal.x, y: target.position.y + target.normal.y, z: target.position.z + target.normal.z };
-    if (!world.get(position.x, position.y, position.z) && !intersectsPlayer(position)) {
+    if (intersectsPlayer(position)) return;
+    if (type === "bed") {
+      if (!placeBedPair(world, position, yaw)) {
+        status.textContent = "床需要两格空间且下方坚实";
+        return;
+      }
+      inventory.bed -= 1;
+      soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
+    } else if (type === "torch") {
+      if (!canPlaceTorchAt(world, position, target.position)) {
+        status.textContent = "火把需要附着在坚实方块上";
+        return;
+      }
+      world.set(position, "torch");
+      inventory.torch -= 1;
+      soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
+    } else {
+      if (world.get(position.x, position.y, position.z)) return;
       world.set(position, type);
       inventory[type] -= 1;
       soundscape.play("place");
       room?.sendEdit({ action: "place", position, type });
     }
   }
+  syncTorchLights();
   refreshWorld();
   renderHotbar();
   persist();
@@ -1518,6 +1640,8 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   raids = [];
   raidCooldown = 0;
   witherStars = slot.save.player.witherStars ?? 0;
+  bedSpawn = slot.save.player.spawnPoint;
+  dayClock.setNow(slot.save.player.dayPhaseMs ?? 0);
   resetWithers();
   // Restore the per-world nether + end sub-worlds and dimension if the slot carries one.
   nether = slot.save.player.nether ? NetherWorld.fromSnapshot(slot.save.player.nether) : new NetherWorld(world.seed);
@@ -1554,6 +1678,8 @@ const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
   end: new EndWorld(nextWorld.seed).snapshot(),
   endCleared: false,
   witherStars: 0,
+  spawnPoint: undefined,
+  dayPhaseMs: 0,
 });
 
 const createNewWorld = (name: string): void => {
@@ -1672,6 +1798,33 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         releasePointerForUi();
         refreshStationsUi();
         status.textContent = "熔炉已打开";
+        return;
+      }
+      if (aimed === "bed") {
+        const result = trySleepInBed({
+          worldTimeMs: dayClock.now(),
+          dimension,
+          bed: target.position,
+          monstersNearby: hostileWithinSleepRange(target.position, mobs),
+        });
+        if (!result.ok) {
+          status.textContent =
+            result.reason === "daytime" ? "只能在夜间睡觉"
+              : result.reason === "monsters" ? "附近有怪物，无法安睡"
+                : "只能在主世界的床上睡觉";
+          return;
+        }
+        dayClock.setNow(result.nextWorldTimeMs);
+        bedSpawn = result.spawn;
+        camera.position.set(...result.spawn);
+        verticalVelocity = 0;
+        grounded = true;
+        playerHealth = maxPlayerHealth;
+        soundscape.play("respawn");
+        status.textContent = "一觉睡到天亮 · 已设置重生点";
+        renderHealth();
+        dirty = true;
+        persist();
         return;
       }
     }
@@ -1915,9 +2068,7 @@ const updateRaidsLoop = (delta: number): void => {
   raids = raids.filter((raid) => raid.active && !raid.defeated);
 
   // Start a fresh raid at night once the field is clear and the cooldown has passed.
-  const dayProgressNow = (performance.now() % 150000) / 150000;
-  const isNight = Math.sin(dayProgressNow * Math.PI * 2) * 0.5 + 0.5 < 0.22;
-  if (isNight && raids.length === 0 && world.villages.length && raidCooldown <= 0) {
+  if (sunHeightAt(dayClock.now()) < 0.22 && raids.length === 0 && world.villages.length && raidCooldown <= 0) {
     raids.push(createRaid(nextRaidId++, world.villages[0]));
   }
 
@@ -2271,9 +2422,10 @@ const frame = (now: number): void => {
   }
   syncRenderedChunks();
   if (dimension === "overworld") {
-    const dayProgress = (now % 150000) / 150000;
-    const sunHeight = Math.sin(dayProgress * Math.PI * 2) * 0.5 + 0.5;
-    const angle = dayProgress * Math.PI * 2 - Math.PI / 2;
+    const worldNow = dayClock.now();
+    const progress = dayProgress(worldNow);
+    const sunHeight = sunHeightAt(worldNow);
+    const angle = progress * Math.PI * 2 - Math.PI / 2;
     sun.position.set(Math.cos(angle) * 38, Math.sin(angle) * 34 + 5, 18);
     sun.intensity = 0.15 + sunHeight * 2.65;
     daylight.intensity = 0.25 + sunHeight * 1.95;
@@ -2285,8 +2437,9 @@ const frame = (now: number): void => {
     skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
     scene.background = skyColor;
     fog.color.copy(skyColor);
-    cloudGroup.position.x = ((dayProgress * 18) % 8) - 4;
+    cloudGroup.position.x = ((progress * 18) % 8) - 4;
     timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
+    syncTorchLights();
   }
   findTarget();
   updateMining(delta);

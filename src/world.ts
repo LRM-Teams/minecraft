@@ -1,7 +1,10 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "crafting_table", "furnace"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "crafting_table", "furnace", "torch", "wool", "bed"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
+
+/** Blocks that do not occlude neighbours or block movement (torch is a thin fixture). */
+export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch"]);
 export const CHUNK_SIZE = 16;
 
 export type BlockPosition = { x: number; y: number; z: number };
@@ -60,7 +63,7 @@ export class VoxelWorld {
 
   isSolid(x: number, y: number, z: number): boolean {
     const block = this.get(x, y, z);
-    return block !== undefined && block !== "water";
+    return block !== undefined && !NON_SOLID_BLOCKS.has(block);
   }
 
   set(position: BlockPosition, type: BlockType): void {
@@ -100,7 +103,9 @@ export class VoxelWorld {
       ) return;
       const exposed = NEIGHBORS.some((offset) => {
         const neighbour = this.get(x + offset.x, y + offset.y, z + offset.z);
-        return neighbour === undefined || (neighbour === "water" && type !== "water");
+        if (neighbour === undefined) return true;
+        if (NON_SOLID_BLOCKS.has(neighbour) && type !== neighbour) return true;
+        return false;
       });
       if (exposed) visible.push({ position: { x, y, z }, type });
     });
@@ -308,6 +313,9 @@ export class VoxelWorld {
       }
     }
     for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) this.set({ x, y: groundY + 4, z }, "wood");
+    // Wool rugs / bedding stock — sheep AI is later Phase work; villages supply wool for beds.
+    this.set({ x: centerX - 1, y: groundY + 1, z: centerZ }, "wool");
+    this.set({ x: centerX - 1, y: groundY + 1, z: centerZ + (entranceSide === "north" ? 1 : -1) }, "wool");
     return {
       id,
       entrance: { x: centerX, y: groundY + 1, z: doorZ },
