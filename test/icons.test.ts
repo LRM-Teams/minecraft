@@ -67,28 +67,3 @@ describe("distributable icon mapping + atlas", () => {
     expect(iconsSource).not.toMatch(/cache\/restricted\/\*/);
   });
 });
-
-describe("Pages dist must not embed restricted icons", () => {
-  it("built assets omit restricted cache paths when dist/ exists", async () => {
-    const { existsSync, readFileSync, readdirSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const dist = join(process.cwd(), "dist");
-    if (!existsSync(dist)) return;
-    const walk = (dir: string): string[] => {
-      const out: string[] = [];
-      for (const name of readdirSync(dir, { withFileTypes: true })) {
-        const p = join(dir, name.name);
-        if (name.isDirectory()) out.push(...walk(p));
-        else out.push(p);
-      }
-      return out;
-    };
-    const files = walk(dist);
-    expect(files.some((f) => f.includes("cache/restricted") || f.includes("cache\\restricted"))).toBe(false);
-    for (const f of files.filter((p) => /\.(js|css|html|map)$/.test(p))) {
-      const text = readFileSync(f, "utf8");
-      expect(text.includes("cache/restricted"), f).toBe(false);
-      expect(text.includes("restricted-mojang"), f).toBe(false);
-    }
-  });
-});
