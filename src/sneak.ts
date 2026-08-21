@@ -38,7 +38,7 @@ export const speedForMode = (mode: "sneak" | "sprint" | "walk"): number => {
 
 /**
  * Edge protection: while sneaking on the ground, refuse a horizontal step that
- * would drop the standing height (camera eye ≈ ground + 1.72).
+ * would drop the standing height (camera eye ≈ ground + PLAYER_EYE).
  */
 export const wouldFallOffEdge = (options: {
   currentEyeY: number;

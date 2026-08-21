@@ -39,7 +39,7 @@ export const isClimbingLadder = (
 ): boolean => {
   const x = Math.round(eyeX);
   const z = Math.round(eyeZ);
-  // Feet ≈ eye − 1.72; sample mid-body and feet cells.
+  // Feet ≈ eye − PLAYER_EYE; sample mid-body and feet cells.
   const ys = [Math.floor(eyeY - 0.5), Math.floor(eyeY - 1.4)];
   for (const y of ys) {
     if (world.get(x, y, z) === "ladder") return true;

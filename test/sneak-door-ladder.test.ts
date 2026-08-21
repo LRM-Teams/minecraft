@@ -139,6 +139,6 @@ describe("ladder craft / place / climb", () => {
     expect(result.ok).toBe(true);
     expect(world.get(2, y, 0)).toBe("ladder");
     expect(world.isSolid(2, y, 0)).toBe(false);
-    expect(isClimbingLadder(world, 2.1, y + 1.72, 0.1)).toBe(true);
+    expect(isClimbingLadder(world, 2.1, y + 1.62, 0.1)).toBe(true);
   });
 });

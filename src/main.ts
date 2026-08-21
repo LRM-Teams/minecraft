@@ -173,7 +173,15 @@ import {
 } from "./end";
 import { createEnderDragon, hitEnderDragon, updateEnderDragon } from "./enderDragon";
 import { createCrackOverlay, createViewmodel } from "./viewmodel";
-import { eyeOnFloor, findStandFloor, walkEyeY } from "./playerMove";
+import {
+  PLAYER_EYE,
+  PLAYER_HEIGHT,
+  PLAYER_HALF_WIDTH,
+  eyeOnFloor,
+  findStandFloor,
+  tryHorizontalMove,
+  resolveVertical,
+} from "./playerMove";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -987,10 +995,10 @@ const dayClock: DayClock = createDayClock(saved?.player.dayPhaseMs ?? 0);
 const respawnPoint = (): [number, number, number] => {
   if (dimension === "end") {
     const s = endSpawn();
-    return [s.x, endWorld.topY(s.x, s.z) + 1.72, s.z];
+    return [s.x, endWorld.topY(s.x, s.z) + PLAYER_EYE, s.z];
   }
   if (dimension === "overworld" && bedSpawn) return [...bedSpawn];
-  return [0, currentTopY(0, 0) + 1.72, dimension === "nether" ? 4 : 8];
+  return [0, currentTopY(0, 0) + PLAYER_EYE, dimension === "nether" ? 4 : 8];
 };
 
 const MAX_TORCH_LIGHTS = 14;
@@ -1538,7 +1546,7 @@ const poisonAcc = { value: 0 };
 const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
-const initialY = world.topY(0, 0) + 1.72;
+const initialY = world.topY(0, 0) + PLAYER_EYE;
 camera.position.fromArray(saved?.player.position ?? [0, initialY, 8]);
 camera.rotation.set(pitch, yaw, 0);
 seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -1909,7 +1917,7 @@ const syncRemotePlayers = (): void => {
       remotePlayerMeshes.set(id, mesh);
       scene.add(mesh);
     }
-    mesh.position.set(player.position[0], player.position[1] - 1.72, player.position[2]);
+    mesh.position.set(player.position[0], player.position[1] - PLAYER_EYE, player.position[2]);
     mesh.rotation.y = player.yaw;
   });
   updateNetworkStatus();
@@ -2080,7 +2088,10 @@ const attackMobAtCrosshair = (): boolean => {
 const intersectsPlayer = (position: BlockPosition): boolean => {
   const dx = Math.abs(camera.position.x - position.x);
   const dz = Math.abs(camera.position.z - position.z);
-  return dx < 0.45 && dz < 0.45 && position.y >= camera.position.y - 1.8 && position.y <= camera.position.y + 0.1;
+  const feet = camera.position.y - PLAYER_EYE;
+  const head = feet + PLAYER_HEIGHT;
+  return dx < PLAYER_HALF_WIDTH + 0.15 && dz < PLAYER_HALF_WIDTH + 0.15
+    && position.y >= feet - 0.05 && position.y <= head + 0.05;
 };
 
 const edit = (place: boolean): void => {
@@ -2309,7 +2320,7 @@ const applyWorldSlot = (slot: WorldSlot): void => {
 const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => {
   const slots = createStarterSlots();
   return {
-    position: [0, nextWorld.topY(0, 0) + 1.72, 8],
+    position: [0, nextWorld.topY(0, 0) + PLAYER_EYE, 8],
     yaw: 0,
     pitch: -0.18,
     selected: 0,
@@ -2750,22 +2761,44 @@ const updatePlayer = (delta: number): void => {
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
     const sideX = Math.cos(yaw), sideZ = -Math.sin(yaw);
     // Overworld is infinite (chunk-streamed). Nether/End keep their finite bounds.
-    let nextX = camera.position.x + (forwardX * inputZ + sideX * inputX) / length * speed * delta;
-    let nextZ = camera.position.z + (forwardZ * inputZ + sideZ * inputX) / length * speed * delta;
+    let wishX = (forwardX * inputZ + sideX * inputX) / length * speed * delta;
+    let wishZ = (forwardZ * inputZ + sideZ * inputX) / length * speed * delta;
     if (dimension !== "overworld") {
       const size = currentSize();
-      nextX = THREE.MathUtils.clamp(nextX, -size + 1, size - 1);
-      nextZ = THREE.MathUtils.clamp(nextZ, -size + 1, size - 1);
+      const clampedX = THREE.MathUtils.clamp(camera.position.x + wishX, -size + 1, size - 1);
+      const clampedZ = THREE.MathUtils.clamp(camera.position.z + wishZ, -size + 1, size - 1);
+      wishX = clampedX - camera.position.x;
+      wishZ = clampedZ - camera.position.z;
     }
-    const nextEye = walkEyeY(currentIsSolid, nextX, nextZ, camera.position.y);
-    const edgeBlocked = wantSneak && grounded && nextEye !== null && wouldFallOffEdge({
-      currentEyeY: camera.position.y,
-      nextEyeY: nextEye,
-    });
-    // Local stand floor + 2-block headroom (not column topY — that blocked tunnels).
-    if (!edgeBlocked && nextEye !== null) {
-      camera.position.x = nextX;
-      camera.position.z = nextZ;
+    const movedTo = tryHorizontalMove(
+      currentIsSolid,
+      camera.position.x,
+      camera.position.y,
+      camera.position.z,
+      wishX,
+      wishZ,
+    );
+    const nextStand = findStandFloor(
+      currentIsSolid,
+      movedTo.x,
+      movedTo.z,
+      camera.position.y,
+    );
+    const nextStandEye = nextStand === null ? camera.position.y - 10 : eyeOnFloor(nextStand);
+    const edgeBlocked = wantSneak && grounded && (
+      nextStand === null
+      || wouldFallOffEdge({
+        currentEyeY: camera.position.y,
+        nextEyeY: nextStandEye,
+      })
+    );
+    // AABB footprint + 2-block headroom (not column topY — that blocked tunnels).
+    if (!edgeBlocked) {
+      camera.position.x = movedTo.x;
+      camera.position.z = movedTo.z;
+      if (movedTo.eyeY > camera.position.y + 1e-4) {
+        camera.position.y = movedTo.eyeY;
+      }
     }
   }
   const moved = Math.hypot(camera.position.x - prevX, camera.position.z - prevZ);
@@ -2785,18 +2818,22 @@ const updatePlayer = (delta: number): void => {
     soundscape.play("jump");
   }
   if (!onLadder) verticalVelocity -= 19 * delta;
-  camera.position.y += verticalVelocity * delta;
-  const standFloorY = findStandFloor(
-    currentIsSolid,
-    camera.position.x,
-    camera.position.z,
-    camera.position.y,
-  );
-  const ground = standFloorY !== null
-    ? eyeOnFloor(standFloorY)
-    : eyeOnFloor(currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)));
-  if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
-  else if (onLadder) grounded = false;
+  if (onLadder) {
+    camera.position.y += verticalVelocity * delta;
+    grounded = false;
+  } else {
+    const vert = resolveVertical(
+      currentIsSolid,
+      camera.position.x,
+      camera.position.y,
+      camera.position.z,
+      verticalVelocity,
+      delta,
+    );
+    camera.position.y = vert.eyeY;
+    verticalVelocity = vert.verticalVelocity;
+    grounded = vert.grounded;
+  }
   if (camera.position.y < -8) camera.position.set(...respawnPoint());
   const hungerTick = tickHunger(hunger, playerHealth, maxPlayerHealth, delta);
   if (hungerTick.healthDelta !== 0) {
@@ -2923,7 +2960,7 @@ const updateRaidsLoop = (delta: number): void => {
 /** True when a completed Wither ritual sits within a few blocks of the player. */
 const witherRitualNearby = (): { center: { x: number; y: number; z: number } } | undefined => {
   const px = Math.floor(camera.position.x);
-  const py = Math.floor(camera.position.y - 1.72);
+  const py = Math.floor(camera.position.y - PLAYER_EYE);
   const pz = Math.floor(camera.position.z);
   for (let dx = -3; dx <= 3; dx += 1) {
     for (let dy = -3; dy <= 3; dy += 1) {
@@ -3119,7 +3156,7 @@ const updateEndEcology = (delta: number): void => {
     if (playerHealth === 0) {
       playerHealth = maxPlayerHealth;
       const s = endSpawn();
-      camera.position.set(s.x, endWorld.topY(s.x, s.z) + 1.72, s.z);
+      camera.position.set(s.x, endWorld.topY(s.x, s.z) + PLAYER_EYE, s.z);
       verticalVelocity = 0;
       status.textContent = "生命耗尽，已在末地平台重生";
       soundscape.play("respawn");
@@ -3169,7 +3206,7 @@ const enterEnd = (): void => {
     endDragon = createEnderDragon(9001);
   }
   const s = endSpawn();
-  const groundY = endWorld.topY(s.x, s.z) + 1.72;
+  const groundY = endWorld.topY(s.x, s.z) + PLAYER_EYE;
   camera.position.set(s.x, Math.max(groundY, s.y + 0.5), s.z);
   verticalVelocity = 0;
   groundPlayerIfBuried();
@@ -3186,7 +3223,7 @@ const enterEnd = (): void => {
 const exitEnd = (): void => {
   if (dimension !== "end") return;
   dimension = "overworld";
-  const groundY = world.topY(0, 0) + 1.72;
+  const groundY = world.topY(0, 0) + PLAYER_EYE;
   camera.position.set(0, groundY, 8);
   verticalVelocity = 0;
   endDragonGroup?.visible && (endDragonGroup.visible = false);
@@ -3228,7 +3265,7 @@ const tryEnterPortal = (): boolean => {
     if (!isWithinPortalOpening(anchor, link.geometry, Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z))) continue;
     const dest = teleportPosition(link, from, camera.position);
     dimension = from === "overworld" ? "nether" : "overworld";
-    const groundY = currentTopY(dest.x, dest.z) + 1.72;
+    const groundY = currentTopY(dest.x, dest.z) + PLAYER_EYE;
     camera.position.set(dest.x, Math.max(groundY, dest.y + 0.5), dest.z);
     verticalVelocity = 0;
     groundPlayerIfBuried();
@@ -3245,7 +3282,7 @@ const tryEnterPortal = (): boolean => {
 
 /** After teleporting, always stand on (not inside) the active dimension's ground. */
 const groundPlayerIfBuried = (): void => {
-  const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
+  const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + PLAYER_EYE;
   if (camera.position.y < ground) camera.position.y = ground;
 };
 
