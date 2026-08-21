@@ -282,11 +282,11 @@ app.innerHTML = `
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fc8e8");
-const fog = new THREE.Fog("#8fc8e8", 28, 86);
+let perf: PerfConfig = resolvePerfPreset();
+const fog = new THREE.Fog("#8fc8e8", perf.simpleBlockMaterials ? 18 : 28, perf.simpleBlockMaterials ? 52 : 86);
 scene.fog = fog;
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
-let perf: PerfConfig = resolvePerfPreset();
 const viewmodel = createViewmodel();
 camera.add(viewmodel.root);
 const crackOverlay = createCrackOverlay();
@@ -609,20 +609,31 @@ const matrix = new THREE.Matrix4();
 const ONE_WHITE = new THREE.Color(0xffffff);
 
 /**
- * Build Lambert materials for a block — always six face slots (BoxGeometry order).
- * Biome wash via `tint` on `material.color` only (never vertexColors / instanceColor).
- *
- * World meshes must NOT share HUD icon textures; each face is its own 16×16 tile.
+ * Build block materials.
+ * - quality: 6-face Lambert (top/side/bottom)
+ * - balanced/performance: single MeshBasic side texture → 1 draw call per InstancedMesh
  */
-const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Material[] => {
-  const material = (face: BlockFace) => new THREE.MeshLambertMaterial({
+const blockMaterial = (
+  type: BlockType,
+  tint: THREE.Color = ONE_WHITE,
+  simple = false,
+): THREE.Material | THREE.Material[] => {
+  const common = {
     color: tint.clone(),
-    map: blockTexture(type, face),
+    map: blockTexture(type, "side"),
     transparent: type === "leaves" || type === "water" || type === "glass",
     opacity: type === "water" ? 0.7 : type === "glass" ? 0.4 : 1,
     alphaTest: type === "leaves" ? 0.2 : 0,
     depthWrite: type !== "water" && type !== "glass",
-    vertexColors: false,
+    vertexColors: false as const,
+  };
+  if (simple) {
+    return new THREE.MeshBasicMaterial(common);
+  }
+  const material = (face: BlockFace) => new THREE.MeshLambertMaterial({
+    ...common,
+    map: blockTexture(type, face),
+    color: tint.clone(),
   });
   const side = material("side");
   const top = material("top");
@@ -632,12 +643,13 @@ const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Ma
 };
 
 /** Shared materials across chunks — remesh must not dispose these. */
-const blockMaterialCache = new Map<string, THREE.Material[]>();
-const cachedBlockMaterial = (type: BlockType, tint: THREE.Color): THREE.Material[] => {
-  const cacheKey = `${type}:${tint.getHexString()}`;
+const blockMaterialCache = new Map<string, THREE.Material | THREE.Material[]>();
+const cachedBlockMaterial = (type: BlockType, tint: THREE.Color): THREE.Material | THREE.Material[] => {
+  const mode = perf.simpleBlockMaterials ? "basic" : "lambert6";
+  const cacheKey = `${mode}:${type}:${tint.getHexString()}`;
   let mats = blockMaterialCache.get(cacheKey);
   if (!mats) {
-    mats = blockMaterial(type, tint);
+    mats = blockMaterial(type, tint, perf.simpleBlockMaterials);
     blockMaterialCache.set(cacheKey, mats);
   }
   return mats;
@@ -718,6 +730,8 @@ const applyBucketMaterialWash = (mesh: THREE.InstancedMesh, type: BlockType, key
         mat.color.setHex(lit ? 0xffe08a : colors.redstone_lamp);
         mat.emissive = new THREE.Color(lit ? 0xffaa44 : 0x000000);
         mat.emissiveIntensity = lit ? 0.65 : 0;
+      } else if (mat instanceof THREE.MeshBasicMaterial) {
+        mat.color.setHex(lit ? 0xffe08a : colors.redstone_lamp);
       }
     });
   }
@@ -726,7 +740,7 @@ const applyBucketMaterialWash = (mesh: THREE.InstancedMesh, type: BlockType, key
     const t = band / 3;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     mats.forEach((mat) => {
-      if (mat instanceof THREE.MeshLambertMaterial) {
+      if (mat instanceof THREE.MeshLambertMaterial || mat instanceof THREE.MeshBasicMaterial) {
         mat.color.setRGB(0.35 + 0.55 * t, 0.05 + 0.05 * t, 0.05);
       }
     });
@@ -739,6 +753,8 @@ const applyBucketMaterialWash = (mesh: THREE.InstancedMesh, type: BlockType, key
         mat.color.setHex(on ? 0xff4040 : 0x4a2020);
         mat.emissive = new THREE.Color(on ? 0xff2020 : 0x000000);
         mat.emissiveIntensity = on ? 0.45 : 0;
+      } else if (mat instanceof THREE.MeshBasicMaterial) {
+        mat.color.setHex(on ? 0xff4040 : 0x4a2020);
       }
     });
   }
@@ -1232,6 +1248,7 @@ for (let i = 0; i < TORCH_LIGHT_POOL; i += 1) {
 }
 
 let nextTorchSyncAt = 0;
+let nextSkySyncAt = 0;
 const syncTorchLights = (now = performance.now()): void => {
   if (now < nextTorchSyncAt) return;
   nextTorchSyncAt = now + perf.torchSyncEveryMs;
@@ -1269,7 +1286,7 @@ const applyDimensionEnvironment = (): void => {
   sun.intensity = inNether ? 0.6 : inEnd ? 0.35 : 0.15 + height * 2.65;
   daylight.color.set(inNether ? "#c96a5a" : inEnd ? "#b9b3d9" : "#d8efff");
   daylight.intensity = inNether ? 1.5 : inEnd ? 1.1 : 0.25 + height * 1.95;
-  cloudGroup.visible = !inNether && !inEnd;
+  cloudGroup.visible = !inNether && !inEnd && perf.skyDecor;
   syncTorchLights();
 };
 
@@ -1920,7 +1937,15 @@ const applyPerfConfig = (next: PerfConfig, remesh = true): void => {
   sun.castShadow = perf.shadowsEnabled;
   sun.shadow.mapSize.set(perf.shadowMapSize, perf.shadowMapSize);
   blocks.setShadowFlags(perf.terrainCastShadow, perf.terrainReceiveShadow);
+  cloudGroup.visible = perf.skyDecor && dimension === "overworld";
+  if (!perf.skyDecor) {
+    starMaterial.opacity = 0;
+    moonMaterial.opacity = 0;
+  }
+  fog.near = perf.simpleBlockMaterials ? 18 : 28;
+  fog.far = perf.simpleBlockMaterials ? 52 : 86;
   nextTorchSyncAt = 0;
+  nextSkySyncAt = 0;
   syncTorchLights();
   if (remesh) {
     loadedChunkX = Number.NaN;
@@ -3649,20 +3674,20 @@ const frame = (now: number): void => {
     updateDropsLoop(delta);
     if (dimension === "overworld") {
       tryEnterPortal();
-      // Stagger ecology so one rAF never pays mobs+villagers+raid+wither together.
-      const phase = (ecologyPhase++ & 3);
+      // Stagger ecology across 8 slots — half empty to keep rAF under 1s on SwiftShader.
+      const phase = (ecologyPhase++ & 7);
       if (phase === 0) {
         syncWitherMinionTags();
-        updateMobs(delta * 4);
-      } else if (phase === 1) {
-        updateGuardiansLoop(delta * 4);
+        updateMobs(delta * 8);
       } else if (phase === 2) {
-        updateVillagersLoop(delta * 4);
-        updateRaidsLoop(delta * 4);
-      } else {
-        updateWitherLoop(delta * 4);
+        updateGuardiansLoop(delta * 8);
+      } else if (phase === 4) {
+        updateVillagersLoop(delta * 8);
+      } else if (phase === 6) {
+        updateRaidsLoop(delta * 8);
+        updateWitherLoop(delta * 8);
       }
-      renderBiomeState();
+      if ((phase & 3) === 0) renderBiomeState();
     } else if (dimension === "end") {
       updateEndEcology(delta);
       updateMobs(delta);
@@ -3678,7 +3703,8 @@ const frame = (now: number): void => {
     }
   }
   syncRenderedChunks();
-  if (dimension === "overworld") {
+  if (dimension === "overworld" && now >= nextSkySyncAt) {
+    nextSkySyncAt = now + perf.skySyncEveryMs;
     const worldNow = dayClock.now();
     const progress = dayProgress(worldNow);
     const sunHeight = sunHeightAt(worldNow);
@@ -3688,14 +3714,21 @@ const frame = (now: number): void => {
     daylight.intensity = 0.25 + sunHeight * 1.95;
     const night = 1 - sunHeight;
     moon.position.set(-sun.position.x, -sun.position.y + 12, -sun.position.z);
-    moonMaterial.opacity = Math.max(0, (night - 0.25) / 0.75);
-    starMaterial.opacity = Math.max(0, (night - 0.32) / 0.68) * 0.92;
-    cloudMaterial.opacity = 0.22 + sunHeight * 0.58;
+    if (perf.skyDecor) {
+      moonMaterial.opacity = Math.max(0, (night - 0.25) / 0.75);
+      starMaterial.opacity = Math.max(0, (night - 0.32) / 0.68) * 0.92;
+      cloudMaterial.opacity = 0.22 + sunHeight * 0.58;
+      cloudGroup.position.x = ((progress * 18) % 8) - 4;
+    } else {
+      moonMaterial.opacity = 0;
+      starMaterial.opacity = 0;
+    }
     skyColor.setHSL(0.58, 0.45, 0.1 + sunHeight * 0.63);
     scene.background = skyColor;
     fog.color.copy(skyColor);
-    cloudGroup.position.x = ((progress * 18) % 8) - 4;
     timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
+    syncTorchLights(now);
+  } else if (dimension === "overworld") {
     syncTorchLights(now);
   }
   syncTarget(now);

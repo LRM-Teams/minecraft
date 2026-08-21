@@ -176,6 +176,26 @@ export class VoxelWorld {
   ): boolean {
     const cx = this.chunkAt(worldX);
     const cz = this.chunkAt(worldZ);
+    // Hot path: budget 1 — pick nearest missing without allocating/sorting a list.
+    if (budget === 1) {
+      let bestDx = 0;
+      let bestDz = 0;
+      let bestDist = Number.POSITIVE_INFINITY;
+      let found = false;
+      for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
+        for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
+          if (this.generatedChunks.has(chunkKey(cx + dx, cz + dz))) continue;
+          const dist = dx * dx + dz * dz;
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestDx = dx;
+            bestDz = dz;
+            found = true;
+          }
+        }
+      }
+      return found ? this.ensureChunk(cx + bestDx, cz + bestDz) : false;
+    }
     const missing: { dx: number; dz: number; dist: number }[] = [];
     for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
       for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
@@ -184,6 +204,7 @@ export class VoxelWorld {
         }
       }
     }
+    if (!missing.length) return false;
     missing.sort((a, b) => a.dist - b.dist);
     let grew = false;
     let used = 0;
