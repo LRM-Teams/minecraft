@@ -379,11 +379,11 @@ export const renderFurnacePanelHtml = (state: FurnaceState, inventory: Inventory
   const cookPct = state.cookDuration > 0 ? Math.round((state.cookProgress / state.cookDuration) * 100) : 0;
   const burnPct = state.burnTotal > 0 ? Math.round((state.burnRemaining / state.burnTotal) * 100) : 0;
   const bagSmelt = ownedItems(inventory)
-    .filter((item) => ["iron_ore", "gold_ore", "copper_ore", "coal_ore", "diamond_ore", "sand", "wood", "raw_beef"].includes(item))
+    .filter((item) => ["iron_ore", "gold_ore", "copper_ore", "sand", "wood", "raw_beef"].includes(item))
     .map((item) => `<button type="button" class="station-bag" data-furnace-input="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`)
     .join("") || "<p class='station-empty'>无可烧炼物</p>";
   const bagFuel = ownedItems(inventory)
-    .filter((item) => ["coal", "charcoal", "coal_ore", "wood", "planks", "stick"].includes(item))
+    .filter((item) => ["coal", "charcoal", "wood", "planks", "stick"].includes(item))
     .map((item) => `<button type="button" class="station-bag" data-furnace-fuel="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`)
     .join("") || "<p class='station-empty'>无燃料</p>";
 

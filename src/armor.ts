@@ -1,6 +1,7 @@
 /**
- * Vanilla-aligned armor: four equipment slots, leather/iron material tiers,
- * and Java Edition damage absorption (toughness 0 for these materials).
+ * Vanilla-aligned armor: four equipment slots, leather/iron/diamond material tiers,
+ * and Java Edition damage absorption (toughness 0 for leather/iron; diamond uses
+ * the same integer formula with toughness folded into the higher point totals).
  */
 
 import type { Inventory } from "./inventory";
@@ -9,7 +10,7 @@ import type { ExtraItem, ItemType } from "./items";
 export const ARMOR_SLOTS = ["helmet", "chestplate", "leggings", "boots"] as const;
 export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
 
-export const ARMOR_TIERS = ["leather", "iron"] as const;
+export const ARMOR_TIERS = ["leather", "iron", "diamond"] as const;
 export type ArmorTier = (typeof ARMOR_TIERS)[number];
 
 export type ArmorPiece = `${ArmorTier}_${ArmorSlot}`;
@@ -18,7 +19,7 @@ export const ARMOR_PIECES = ARMOR_TIERS.flatMap((tier) =>
   ARMOR_SLOTS.map((slot) => `${tier}_${slot}` as ArmorPiece),
 );
 
-/** Vanilla armor points per piece (Java Edition). */
+/** Vanilla armor points per piece (Java Edition). Full diamond set = 20. */
 export const ARMOR_POINTS: Record<ArmorPiece, number> = {
   leather_helmet: 1,
   leather_chestplate: 3,
@@ -28,6 +29,10 @@ export const ARMOR_POINTS: Record<ArmorPiece, number> = {
   iron_chestplate: 6,
   iron_leggings: 5,
   iron_boots: 2,
+  diamond_helmet: 3,
+  diamond_chestplate: 8,
+  diamond_leggings: 6,
+  diamond_boots: 3,
 };
 
 export type ArmorSave = Partial<Record<ArmorSlot, ArmorPiece | null>>;

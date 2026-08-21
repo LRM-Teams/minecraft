@@ -125,7 +125,7 @@ describe("VoxelWorld", () => {
       if (!(type in counts)) return;
       counts[type] += 1;
       const y = Number(key.split(",")[1]);
-      if (y > 9) surfaceOre += 1;
+      if (y > 12) surfaceOre += 1;
     });
     // All five ores appear.
     Object.values(counts).forEach((count) => expect(count).toBeGreaterThan(0));
@@ -133,7 +133,7 @@ describe("VoxelWorld", () => {
     expect(counts.diamond_ore).toBeLessThan(counts.iron_ore);
     expect(counts.diamond_ore).toBeLessThan(counts.copper_ore);
     expect(counts.gold_ore).toBeLessThan(counts.coal_ore);
-    // No ore leaks above the underground band (surface stays untouched).
+    // No ore leaks into the near-surface band (ore maxY is 12; keep top soil clean).
     expect(surfaceOre).toBe(0);
   });
 

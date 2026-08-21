@@ -47,6 +47,22 @@ describe("armor recipes (grid, not hotkeys)", () => {
     expect(matchRecipe(boots)?.result.item).toBe("iron_boots");
   });
 
+  it("crafts a full diamond armor set from diamonds (20 points)", () => {
+    const helm = emptyGrid(3);
+    helm[0] = "diamond";
+    helm[1] = "diamond";
+    helm[2] = "diamond";
+    helm[3] = "diamond";
+    helm[5] = "diamond";
+    expect(matchRecipe(helm)?.result.item).toBe("diamond_helmet");
+
+    const chest = emptyGrid(3);
+    chest[0] = "diamond";
+    chest[2] = "diamond";
+    for (let i = 3; i < 9; i += 1) chest[i] = "diamond";
+    expect(matchRecipe(chest)?.result.item).toBe("diamond_chestplate");
+  });
+
   it("rejects raw ore as armor material (needs smelted ingots / leather)", () => {
     const grid = emptyGrid(3);
     grid[0] = "iron_ore";
@@ -89,6 +105,21 @@ describe("armor equip and reduction", () => {
     expect(equipArmor(armor, inventory, "iron_leggings")).toBe(true);
     expect(equipArmor(armor, inventory, "iron_boots")).toBe(true);
     expect(totalArmorPoints(armor)).toBe(15);
+  });
+
+  it("sums full diamond set to vanilla 20 armor points", () => {
+    const inventory = createInventory({
+      diamond_helmet: 1,
+      diamond_chestplate: 1,
+      diamond_leggings: 1,
+      diamond_boots: 1,
+    });
+    const armor = createArmorState();
+    expect(equipArmor(armor, inventory, "diamond_helmet")).toBe(true);
+    expect(equipArmor(armor, inventory, "diamond_chestplate")).toBe(true);
+    expect(equipArmor(armor, inventory, "diamond_leggings")).toBe(true);
+    expect(equipArmor(armor, inventory, "diamond_boots")).toBe(true);
+    expect(totalArmorPoints(armor)).toBe(20);
   });
 
   it("reduces measurable damage with full iron vs bare", () => {

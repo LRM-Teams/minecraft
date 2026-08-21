@@ -15,8 +15,7 @@ export const SMELT_RECIPES: readonly SmeltRecipe[] = [
   { id: "iron", input: "iron_ore", output: "iron_ingot", duration: 10 },
   { id: "gold", input: "gold_ore", output: "gold_ingot", duration: 10 },
   { id: "copper", input: "copper_ore", output: "copper_ingot", duration: 10 },
-  { id: "coal", input: "coal_ore", output: "coal", duration: 10 },
-  { id: "diamond", input: "diamond_ore", output: "diamond", duration: 10 },
+  // Coal / diamond drop as items when mined (vanilla); not furnace inputs.
   { id: "glass", input: "sand", output: "glass", duration: 10 },
   { id: "charcoal", input: "wood", output: "charcoal", duration: 10 },
   { id: "cooked_beef", input: "raw_beef", output: "cooked_beef", duration: 10 },
@@ -25,7 +24,6 @@ export const SMELT_RECIPES: readonly SmeltRecipe[] = [
 export const FUELS: readonly FuelEntry[] = [
   { item: "coal", burnSeconds: 80 },
   { item: "charcoal", burnSeconds: 80 },
-  { item: "coal_ore", burnSeconds: 15 },
   { item: "wood", burnSeconds: 15 },
   { item: "planks", burnSeconds: 15 },
   { item: "stick", burnSeconds: 5 },
