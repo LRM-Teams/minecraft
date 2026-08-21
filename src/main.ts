@@ -66,7 +66,15 @@ import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
-import { PERF } from "./perf";
+import {
+  chunkIdOf,
+  nextPerfPreset,
+  parseChunkId,
+  persistPerfPreset,
+  PERF_PRESETS,
+  resolvePerfPreset,
+  type PerfConfig,
+} from "./perf";
 import { createFpsSample, tickFps } from "./fps";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { BOX_FACES, type BlockFace } from "./blockFaces";
@@ -249,7 +257,14 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键无限探索　空格跳跃　Shift 冲刺　Ctrl 潜行　鼠标视角<br/>左键长按破坏　右键放置（持方块时优先放置，空着手交互拉杆/床/木门）<br/>1–9 / 滚轮切换热键　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效</p>
+      <p class="keys">WASD / 方向键无限探索　空格跳跃　Shift 冲刺　Ctrl 潜行　鼠标视角<br/>左键长按破坏　右键放置（持方块时优先放置，空着手交互拉杆/床/木门）<br/>1–9 / 滚轮切换热键　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效 · F3 性能档</p>
+      <label class="perf-row">画质/性能
+        <select id="perf-preset" aria-label="性能预设">
+          <option value="performance">性能（关阴影·少灯）</option>
+          <option value="balanced" selected>均衡（默认·中端可玩）</option>
+          <option value="quality">画质（阴影·多灯）</option>
+        </select>
+      </label>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -271,15 +286,19 @@ const fog = new THREE.Fog("#8fc8e8", 28, 86);
 scene.fog = fog;
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
+let perf: PerfConfig = resolvePerfPreset();
 const viewmodel = createViewmodel();
 camera.add(viewmodel.root);
 const crackOverlay = createCrackOverlay();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, PERF.maxPixelRatio));
+renderer.setPixelRatio(Math.min(devicePixelRatio, perf.maxPixelRatio));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = PERF.shadowMap;
-renderer.shadowMap.type = THREE.BasicShadowMap;
+renderer.shadowMap.enabled = perf.shadowsEnabled;
+renderer.shadowMap.type = perf.softShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
 app.prepend(renderer.domElement);
+
+const perfSelect = document.querySelector<HTMLSelectElement>("#perf-preset");
+if (perfSelect) perfSelect.value = perf.id;
 
 // --- WebGL context-loss resilience: recover a black/blank scene after the GPU
 // restores its context (driver switch / power events) instead of staying black. ---
@@ -301,14 +320,12 @@ renderer.domElement.addEventListener("webglcontextrestored", () => {
 
 const sun = new THREE.DirectionalLight("#fff2c5", 2.8);
 sun.position.set(-20, 32, 14);
-sun.castShadow = PERF.sunCastShadow;
-if (PERF.sunCastShadow) {
-  sun.shadow.mapSize.set(512, 512);
-  sun.shadow.camera.left = -28;
-  sun.shadow.camera.right = 28;
-  sun.shadow.camera.top = 28;
-  sun.shadow.camera.bottom = -28;
-}
+sun.castShadow = perf.shadowsEnabled;
+sun.shadow.mapSize.set(perf.shadowMapSize, perf.shadowMapSize);
+sun.shadow.camera.left = -35;
+sun.shadow.camera.right = 35;
+sun.shadow.camera.top = 35;
+sun.shadow.camera.bottom = -35;
 scene.add(sun);
 const skyColor = new THREE.Color();
 const daylight = new THREE.HemisphereLight("#d8efff", "#4a5e35", 2.2);
@@ -707,33 +724,69 @@ const applyBucketMaterialWash = (mesh: THREE.InstancedMesh, type: BlockType, key
   }
 };
 
-class BlockRenderer {
-  /** Keyed by `type` or `type:variant` so biome wash can use material.color safely. */
-  private meshes = new Map<string, THREE.InstancedMesh>();
+const NO_CAST_SHADOW: ReadonlySet<BlockType> = new Set([
+  "leaves", "torch", "redstone_dust", "lever", "redstone_torch", "ladder",
+]);
 
-  /**
-   * Incremental rebuild: only dispose buckets that disappeared or changed count.
-   * Avoids full-scene InstancedMesh teardown on every chunk step (LRM-1613).
-   */
-  rebuild(world: VoxelWorld, centerX: number, centerZ: number): void {
+/** Bucket key + biome tint for one exposed block. */
+const blockMeshKey = (
+  world: VoxelWorld,
+  type: BlockType,
+  position: BlockPosition,
+): { key: string; tint: THREE.Color } => {
+  let key: string = type;
+  let tint = ONE_WHITE;
+  if (BIOME_TINTABLE.has(type)) {
+    const variant = biomeAt(position.x, position.z, world.seed).variant;
+    key = `${type}:${variant}`;
+    tint = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant];
+  } else if (type === "redstone_lamp") {
+    key = isLampLitAt(redstoneNet.lampLit, position) ? "redstone_lamp:lit" : "redstone_lamp:off";
+  } else if (type === "redstone_torch") {
+    key = isTorchOnAt(redstoneNet.torchOn, position) ? "redstone_torch:on" : "redstone_torch:off";
+  } else if (type === "redstone_dust") {
+    const p = wirePowerAt(redstoneNet.wirePower, position);
+    key = `redstone_dust:${p > 0 ? Math.ceil(p / 5) : 0}`;
+  } else if (type === "oak_door") {
+    key = isDoorOpen(world, position) ? "oak_door:open" : "oak_door:closed";
+  }
+  return { key, tint };
+};
+
+/**
+ * Per-chunk InstancedMesh mesher (LRM-1613): streaming only builds dirty chunks (throttled).
+ */
+class BlockRenderer {
+  private byChunk = new Map<string, Map<string, THREE.InstancedMesh>>();
+  private pending = new Set<string>();
+  private terrainCastShadow = false;
+  private terrainReceiveShadow = false;
+
+  setShadowFlags(cast: boolean, receive: boolean): void {
+    this.terrainCastShadow = cast;
+    this.terrainReceiveShadow = receive;
+    this.byChunk.forEach((meshes) => {
+      meshes.forEach((mesh) => {
+        const type = mesh.userData.blockType as BlockType;
+        mesh.castShadow = cast && !NO_CAST_SHADOW.has(type);
+        mesh.receiveShadow = receive;
+      });
+    });
+  }
+
+  private clearChunk(id: string): void {
+    const meshes = this.byChunk.get(id);
+    if (!meshes) return;
+    meshes.forEach((mesh) => disposeMesh(mesh));
+    this.byChunk.delete(id);
+  }
+
+  private buildChunk(world: VoxelWorld, cx: number, cz: number): void {
+    const id = chunkIdOf(cx, cz);
+    this.clearChunk(id);
     const buckets = new Map<string, BlockMeshBucket>();
-    world.visibleBlocks(centerX, centerZ, PERF.visibleChunkRadius).forEach(({ type, position }) => {
-      let key: string = type;
-      let tint = ONE_WHITE;
-      if (BIOME_TINTABLE.has(type)) {
-        const variant = biomeAt(position.x, position.z, world.seed).variant;
-        key = `${type}:${variant}`;
-        tint = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant];
-      } else if (type === "redstone_lamp") {
-        key = isLampLitAt(redstoneNet.lampLit, position) ? "redstone_lamp:lit" : "redstone_lamp:off";
-      } else if (type === "redstone_torch") {
-        key = isTorchOnAt(redstoneNet.torchOn, position) ? "redstone_torch:on" : "redstone_torch:off";
-      } else if (type === "redstone_dust") {
-        const p = wirePowerAt(redstoneNet.wirePower, position);
-        key = `redstone_dust:${p > 0 ? Math.ceil(p / 5) : 0}`;
-      } else if (type === "oak_door") {
-        key = isDoorOpen(world, position) ? "oak_door:open" : "oak_door:closed";
-      }
+    world.visibleBlocksInChunk(cx, cz).forEach(({ type, position }) => {
+      const { key, tint } = blockMeshKey(world, type, position);
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = { type, tint, positions: [] };
@@ -741,42 +794,106 @@ class BlockRenderer {
       }
       bucket.positions.push(position);
     });
-
-    for (const [key, mesh] of [...this.meshes.entries()]) {
-      const bucket = buckets.get(key);
-      if (!bucket || bucket.positions.length !== mesh.count) {
-        disposeMesh(mesh);
-        this.meshes.delete(key);
-      }
-    }
-
+    const meshes = new Map<string, THREE.InstancedMesh>();
     buckets.forEach((bucket, key) => {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
-      let mesh = this.meshes.get(key);
-      if (!mesh) {
-        mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        mesh.frustumCulled = true;
-        this.meshes.set(key, mesh);
-        scene.add(mesh);
-      }
+      const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
+      mesh.castShadow = this.terrainCastShadow && !NO_CAST_SHADOW.has(type);
+      mesh.receiveShadow = this.terrainReceiveShadow;
+      mesh.frustumCulled = true;
       positions.forEach((position, index) => {
-        applyBlockInstanceMatrix(type, key, position, index, mesh!);
+        applyBlockInstanceMatrix(type, key, position, index, mesh);
       });
       applyBucketMaterialWash(mesh, type, key);
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
       mesh.userData.positions = positions;
       mesh.userData.blockType = type;
+      mesh.userData.chunkId = id;
+      meshes.set(key, mesh);
+      scene.add(mesh);
     });
+    this.byChunk.set(id, meshes);
   }
 
-  objects(): THREE.Object3D[] { return [...this.meshes.values()]; }
+  invalidateAt(x: number, y: number, z: number): void {
+    const cx = Math.floor(x / CHUNK_SIZE);
+    const cz = Math.floor(z / CHUNK_SIZE);
+    const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    this.pending.add(chunkIdOf(cx, cz));
+    if (localX === 0) this.pending.add(chunkIdOf(cx - 1, cz));
+    if (localX === CHUNK_SIZE - 1) this.pending.add(chunkIdOf(cx + 1, cz));
+    if (localZ === 0) this.pending.add(chunkIdOf(cx, cz - 1));
+    if (localZ === CHUNK_SIZE - 1) this.pending.add(chunkIdOf(cx, cz + 1));
+    void y;
+  }
 
-  show(): void { this.meshes.forEach((mesh) => { mesh.visible = true; }); }
+  private desiredIds(centerX: number, centerZ: number, radius: number): Set<string> {
+    const cx = Math.floor(centerX / CHUNK_SIZE);
+    const cz = Math.floor(centerZ / CHUNK_SIZE);
+    const desired = new Set<string>();
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      for (let dz = -radius; dz <= radius; dz += 1) {
+        desired.add(chunkIdOf(cx + dx, cz + dz));
+      }
+    }
+    return desired;
+  }
 
-  hide(): void { this.meshes.forEach((mesh) => { mesh.visible = false; }); }
+  sync(
+    world: VoxelWorld,
+    centerX: number,
+    centerZ: number,
+    radius: number,
+    opts: { maxBuilds?: number; flush?: boolean; remeshAll?: boolean } = {},
+  ): void {
+    const desired = this.desiredIds(centerX, centerZ, radius);
+    for (const id of [...this.byChunk.keys()]) {
+      if (!desired.has(id)) {
+        this.clearChunk(id);
+        this.pending.delete(id);
+      }
+    }
+    for (const id of [...this.pending]) {
+      if (!desired.has(id)) this.pending.delete(id);
+    }
+    if (opts.remeshAll) {
+      desired.forEach((id) => this.pending.add(id));
+    } else {
+      desired.forEach((id) => {
+        if (!this.byChunk.has(id)) this.pending.add(id);
+      });
+    }
+    const budget = opts.flush ? Number.POSITIVE_INFINITY : (opts.maxBuilds ?? 3);
+    let built = 0;
+    for (const id of [...this.pending]) {
+      if (built >= budget) break;
+      if (!desired.has(id)) {
+        this.pending.delete(id);
+        continue;
+      }
+      const { cx, cz } = parseChunkId(id);
+      this.buildChunk(world, cx, cz);
+      this.pending.delete(id);
+      built += 1;
+    }
+  }
+
+  rebuild(world: VoxelWorld, centerX: number, centerZ: number, radius = 2): void {
+    this.sync(world, centerX, centerZ, radius, { flush: true, remeshAll: true });
+  }
+
+  objects(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = [];
+    this.byChunk.forEach((meshes) => meshes.forEach((mesh) => out.push(mesh)));
+    return out;
+  }
+
+  show(): void { this.byChunk.forEach((meshes) => meshes.forEach((mesh) => { mesh.visible = true; })); }
+
+  hide(): void { this.byChunk.forEach((meshes) => meshes.forEach((mesh) => { mesh.visible = false; })); }
 }
 
 /** A per-material texture helper for the module-internal nether blocks. */
@@ -999,6 +1116,7 @@ refreshRedstone = (): void => {
 };
 refreshRedstone();
 const blocks = new BlockRenderer();
+blocks.setShadowFlags(perf.terrainCastShadow, perf.terrainReceiveShadow);
 
 // --- Phase-3 nether dimension state ---
 let nether = saved?.player.nether ? NetherWorld.fromSnapshot(saved.player.nether) : new NetherWorld(world.seed);
@@ -1041,9 +1159,10 @@ const respawnPoint = (): [number, number, number] => {
   return [0, currentTopY(0, 0) + PLAYER_EYE, dimension === "nether" ? 4 : 8];
 };
 
-const MAX_TORCH_LIGHTS = PERF.maxTorchLights;
+/** Pool sized to quality preset; active count follows `perf.maxTorchLights`. */
+const TORCH_LIGHT_POOL = 14;
 const torchLights: THREE.PointLight[] = [];
-for (let i = 0; i < MAX_TORCH_LIGHTS; i += 1) {
+for (let i = 0; i < TORCH_LIGHT_POOL; i += 1) {
   const light = new THREE.PointLight(TORCH_LIGHT.color, 0, TORCH_LIGHT.distance, TORCH_LIGHT.decay);
   light.visible = false;
   light.castShadow = false;
@@ -1054,7 +1173,7 @@ for (let i = 0; i < MAX_TORCH_LIGHTS; i += 1) {
 let nextTorchSyncAt = 0;
 const syncTorchLights = (now = performance.now()): void => {
   if (now < nextTorchSyncAt) return;
-  nextTorchSyncAt = now + PERF.torchSyncEveryMs;
+  nextTorchSyncAt = now + perf.torchSyncEveryMs;
   if (dimension !== "overworld") {
     torchLights.forEach((light) => { light.intensity = 0; light.visible = false; });
     return;
@@ -1064,7 +1183,7 @@ const syncTorchLights = (now = performance.now()): void => {
     y: Math.round(camera.position.y),
     z: Math.round(camera.position.z),
   };
-  const lit = torchesNear(world, center, 22).slice(0, MAX_TORCH_LIGHTS);
+  const lit = torchesNear(world, center, perf.torchSearchRadius).slice(0, perf.maxTorchLights);
   torchLights.forEach((light, index) => {
     const torch = lit[index];
     if (!torch) {
@@ -1665,26 +1784,79 @@ const endEntriesNear = (): { position: BlockPosition; type: EndBlockId }[] => {
   });
   return entries;
 };
-const syncRenderedChunks = (force = false): void => {
+const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
   const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+  const meshRadius = perf.meshChunkRadius;
   if (dimension === "overworld") {
-    // Infinite open world: generate missing chunks around the player before mesh rebuild.
-    const grew = world.ensureAround(camera.position.x, camera.position.z, PERF.streamChunkRadius);
-    if (grew) force = true;
+    // Stream terrain; do NOT force a full remesh — new chunks enqueue and build throttled.
+    world.ensureAround(camera.position.x, camera.position.z, perf.streamChunkRadius);
   }
-  if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
+  const sameChunk = chunkX === loadedChunkX && chunkZ === loadedChunkZ;
   if (dimension === "nether") {
-    netherChunks.rebuild(netherEntriesNear());
-  } else if (dimension === "end") {
-    endChunks.rebuild(endEntriesNear());
-  } else {
-    blocks.rebuild(world, camera.position.x, camera.position.z);
-    overworldPortal.rebuild(portalEntriesNear());
+    if (force || !sameChunk) {
+      netherChunks.rebuild(netherEntriesNear());
+      loadedChunkX = chunkX;
+      loadedChunkZ = chunkZ;
+    }
+    return;
   }
-  loadedChunkX = chunkX;
-  loadedChunkZ = chunkZ;
+  if (dimension === "end") {
+    if (force || !sameChunk) {
+      endChunks.rebuild(endEntriesNear());
+      loadedChunkX = chunkX;
+      loadedChunkZ = chunkZ;
+    }
+    return;
+  }
+  if (dirtyAt) blocks.invalidateAt(dirtyAt.x, dirtyAt.y, dirtyAt.z);
+  if (force) {
+    blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
+      flush: true,
+      remeshAll: !dirtyAt,
+    });
+    overworldPortal.rebuild(portalEntriesNear());
+    loadedChunkX = chunkX;
+    loadedChunkZ = chunkZ;
+    return;
+  }
+  blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
+    maxBuilds: perf.maxChunkBuildsPerFrame,
+  });
+  if (!sameChunk) {
+    overworldPortal.rebuild(portalEntriesNear());
+    loadedChunkX = chunkX;
+    loadedChunkZ = chunkZ;
+  }
 };
+
+const applyPerfConfig = (next: PerfConfig, remesh = true): void => {
+  perf = next;
+  persistPerfPreset(perf.id);
+  if (perfSelect) perfSelect.value = perf.id;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, perf.maxPixelRatio));
+  renderer.shadowMap.enabled = perf.shadowsEnabled;
+  renderer.shadowMap.type = perf.softShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+  sun.castShadow = perf.shadowsEnabled;
+  sun.shadow.mapSize.set(perf.shadowMapSize, perf.shadowMapSize);
+  blocks.setShadowFlags(perf.terrainCastShadow, perf.terrainReceiveShadow);
+  nextTorchSyncAt = 0;
+  syncTorchLights();
+  if (remesh) {
+    loadedChunkX = Number.NaN;
+    loadedChunkZ = Number.NaN;
+    syncRenderedChunks(true);
+  }
+  status.textContent = `画质：${perf.label}（阴影${perf.shadowsEnabled ? "开" : "关"} · 火把灯≤${perf.maxTorchLights}）`;
+};
+
+perfSelect?.addEventListener("change", () => {
+  const value = perfSelect.value;
+  if (value === "performance" || value === "balanced" || value === "quality") {
+    applyPerfConfig(PERF_PRESETS[value]);
+  }
+});
+
 syncRenderedChunks(true);
 syncDimensionState();
 
@@ -2036,9 +2208,9 @@ const persist = (): void => {
   activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
   dirty = false;
 };
-const refreshWorld = (): void => {
+const refreshWorld = (dirtyAt?: BlockPosition): void => {
   refreshRedstone();
-  syncRenderedChunks(true);
+  syncRenderedChunks(true, dirtyAt);
   seedText.textContent = `WORLD SEED · ${world.seed}`;
   renderVillageState();
   dirty = true;
@@ -2254,7 +2426,7 @@ const edit = (place: boolean): void => {
     room?.sendEdit({ action: "place", position: result.position, type: result.type });
   }
   syncTorchLights();
-  refreshWorld();
+  refreshWorld(target.position);
   renderHotbar();
   persist();
 };
@@ -2701,6 +2873,10 @@ document.addEventListener("keydown", (event) => {
     status.textContent = "玻璃请用熔炉烧沙子（原版烧炼，快捷合成已关闭）";
   }
   if (event.code === "KeyG" && !event.repeat) toggleCodex();
+  if (event.code === "F3" && !event.repeat) {
+    event.preventDefault();
+    applyPerfConfig(PERF_PRESETS[nextPerfPreset(perf.id)]);
+  }
   if (event.code === "KeyP" && !event.repeat) {
     const village = world.village;
     status.textContent = village ? `村庄广场坐标：${village.center.x}, ${village.center.z}` : "当前世界没有可用村庄选址";

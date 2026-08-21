@@ -141,30 +141,63 @@ export class VoxelWorld {
   }
 
   /**
+   * True when a block has at least one non-occluding neighbour face.
+   */
+  private isExposed(x: number, y: number, z: number, type: BlockType): boolean {
+    return NEIGHBORS.some((offset) => {
+      const nx = x + offset.x;
+      const ny = y + offset.y;
+      const nz = z + offset.z;
+      const neighbour = this.get(nx, ny, nz);
+      if (neighbour === undefined) return true;
+      // Open doors / ladders / fixtures expose faces like other non-solids.
+      if (!this.isSolid(nx, ny, nz) && type !== neighbour) return true;
+      return false;
+    });
+  }
+
+  /**
+   * Exposed blocks inside one chunk only (bounded scan). Prefer this for incremental meshing
+   * so a growing open world does not re-scan every stored block on each rebuild.
+   */
+  visibleBlocksInChunk(cx: number, cz: number): { position: BlockPosition; type: BlockType }[] {
+    const visible: { position: BlockPosition; type: BlockType }[] = [];
+    const minX = cx * CHUNK_SIZE;
+    const minZ = cz * CHUNK_SIZE;
+    const maxX = minX + CHUNK_SIZE - 1;
+    const maxZ = minZ + CHUNK_SIZE - 1;
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
+        for (let y = 0; y <= MAX_BUILD_Y; y += 1) {
+          const type = this.get(x, y, z);
+          if (!type) continue;
+          if (this.isExposed(x, y, z, type)) visible.push({ position: { x, y, z }, type });
+        }
+      }
+    }
+    return visible;
+  }
+
+  /**
    * Produces only exposed blocks in the requested square of chunks. This is the
    * rendering boundary: the world remains persistent, while distant chunks cost no draw calls.
    */
   visibleBlocks(centerX?: number, centerZ?: number, chunkRadius?: number): { position: BlockPosition; type: BlockType }[] {
+    if (centerX !== undefined && centerZ !== undefined && chunkRadius !== undefined) {
+      const visible: { position: BlockPosition; type: BlockType }[] = [];
+      const centerChunkX = this.chunkAt(centerX);
+      const centerChunkZ = this.chunkAt(centerZ);
+      for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
+        for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
+          visible.push(...this.visibleBlocksInChunk(centerChunkX + dx, centerChunkZ + dz));
+        }
+      }
+      return visible;
+    }
     const visible: { position: BlockPosition; type: BlockType }[] = [];
-    const centerChunkX = centerX === undefined ? undefined : this.chunkAt(centerX);
-    const centerChunkZ = centerZ === undefined ? undefined : this.chunkAt(centerZ);
     this.blocks.forEach((type, positionKey) => {
       const [x, y, z] = positionKey.split(",").map(Number);
-      if (
-        centerChunkX !== undefined && centerChunkZ !== undefined && chunkRadius !== undefined
-        && (Math.abs(this.chunkAt(x) - centerChunkX) > chunkRadius || Math.abs(this.chunkAt(z) - centerChunkZ) > chunkRadius)
-      ) return;
-      const exposed = NEIGHBORS.some((offset) => {
-        const nx = x + offset.x;
-        const ny = y + offset.y;
-        const nz = z + offset.z;
-        const neighbour = this.get(nx, ny, nz);
-        if (neighbour === undefined) return true;
-        // Open doors / ladders / fixtures expose faces like other non-solids.
-        if (!this.isSolid(nx, ny, nz) && type !== neighbour) return true;
-        return false;
-      });
-      if (exposed) visible.push({ position: { x, y, z }, type });
+      if (this.isExposed(x, y, z, type)) visible.push({ position: { x, y, z }, type });
     });
     return visible;
   }
