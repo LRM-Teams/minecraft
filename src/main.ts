@@ -781,6 +781,11 @@ class BlockRenderer {
   private pending = new Set<string>();
   private terrainCastShadow = false;
   private terrainReceiveShadow = false;
+  /** Cached raycast list — rebuilt only when meshes change. */
+  private objectsCache: THREE.Object3D[] | null = null;
+  private syncedCx = Number.NaN;
+  private syncedCz = Number.NaN;
+  private syncedRadius = -1;
 
   setShadowFlags(cast: boolean, receive: boolean): void {
     this.terrainCastShadow = cast;
@@ -794,11 +799,16 @@ class BlockRenderer {
     });
   }
 
+  private invalidateObjectsCache(): void {
+    this.objectsCache = null;
+  }
+
   private clearChunk(id: string): void {
     const meshes = this.byChunk.get(id);
     if (!meshes) return;
     meshes.forEach((mesh) => disposeMesh(mesh));
     this.byChunk.delete(id);
+    this.invalidateObjectsCache();
   }
 
   private buildChunk(world: VoxelWorld, cx: number, cz: number): void {
@@ -835,6 +845,7 @@ class BlockRenderer {
       scene.add(mesh);
     });
     this.byChunk.set(id, meshes);
+    this.invalidateObjectsCache();
   }
 
   invalidateAt(x: number, y: number, z: number): void {
@@ -869,6 +880,30 @@ class BlockRenderer {
     radius: number,
     opts: { maxBuilds?: number; flush?: boolean; remeshAll?: boolean } = {},
   ): void {
+    const cx = Math.floor(centerX / CHUNK_SIZE);
+    const cz = Math.floor(centerZ / CHUNK_SIZE);
+    // Standing still / same chunk with nothing pending: skip Set alloc + key walks.
+    if (
+      !opts.remeshAll
+      && !opts.flush
+      && this.pending.size === 0
+      && cx === this.syncedCx
+      && cz === this.syncedCz
+      && radius === this.syncedRadius
+    ) {
+      let missing = false;
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        for (let dz = -radius; dz <= radius; dz += 1) {
+          if (!this.byChunk.has(chunkIdOf(cx + dx, cz + dz))) {
+            missing = true;
+            break;
+          }
+        }
+        if (missing) break;
+      }
+      if (!missing) return;
+    }
+
     const desired = this.desiredIds(centerX, centerZ, radius);
     for (const id of [...this.byChunk.keys()]) {
       if (!desired.has(id)) {
@@ -894,11 +929,14 @@ class BlockRenderer {
         this.pending.delete(id);
         continue;
       }
-      const { cx, cz } = parseChunkId(id);
-      this.buildChunk(world, cx, cz);
+      const { cx: buildCx, cz: buildCz } = parseChunkId(id);
+      this.buildChunk(world, buildCx, buildCz);
       this.pending.delete(id);
       built += 1;
     }
+    this.syncedCx = cx;
+    this.syncedCz = cz;
+    this.syncedRadius = radius;
   }
 
   rebuild(world: VoxelWorld, centerX: number, centerZ: number, radius = 2): void {
@@ -906,9 +944,12 @@ class BlockRenderer {
   }
 
   objects(): THREE.Object3D[] {
-    const out: THREE.Object3D[] = [];
-    this.byChunk.forEach((meshes) => meshes.forEach((mesh) => out.push(mesh)));
-    return out;
+    if (!this.objectsCache) {
+      const out: THREE.Object3D[] = [];
+      this.byChunk.forEach((meshes) => meshes.forEach((mesh) => out.push(mesh)));
+      this.objectsCache = out;
+    }
+    return this.objectsCache;
   }
 
   show(): void { this.byChunk.forEach((meshes) => meshes.forEach((mesh) => { mesh.visible = true; })); }
@@ -2144,6 +2185,8 @@ const keys = new Set<string>();
 let verticalVelocity = 0;
 let grounded = false;
 let lastTime = performance.now();
+/** Round-robin ecology lane so one frame never runs every sim system. */
+let ecologyPhase = 0;
 const fpsSample = createFpsSample(lastTime);
 let dirty = false;
 let room: MultiplayerRoom | undefined;
@@ -2272,6 +2315,14 @@ const findTarget = (): void => {
   target = { position, normal };
   selection.visible = true;
   selection.position.set(position.x, position.y, position.z);
+};
+
+/** Raycast is expensive against hundreds of InstancedMeshes — throttle unless mining. */
+let nextTargetAt = 0;
+const syncTarget = (now: number): void => {
+  if (!mineHeld && now < nextTargetAt) return;
+  nextTargetAt = now + (mineHeld ? 0 : 50);
+  findTarget();
 };
 
 /** A mob is hittable only when it is the first object under the crosshair. */
@@ -3598,12 +3649,19 @@ const frame = (now: number): void => {
     updateDropsLoop(delta);
     if (dimension === "overworld") {
       tryEnterPortal();
-      syncWitherMinionTags();
-      updateMobs(delta);
-      updateGuardiansLoop(delta);
-      updateVillagersLoop(delta);
-      updateRaidsLoop(delta);
-      updateWitherLoop(delta);
+      // Stagger ecology so one rAF never pays mobs+villagers+raid+wither together.
+      const phase = (ecologyPhase++ & 3);
+      if (phase === 0) {
+        syncWitherMinionTags();
+        updateMobs(delta * 4);
+      } else if (phase === 1) {
+        updateGuardiansLoop(delta * 4);
+      } else if (phase === 2) {
+        updateVillagersLoop(delta * 4);
+        updateRaidsLoop(delta * 4);
+      } else {
+        updateWitherLoop(delta * 4);
+      }
       renderBiomeState();
     } else if (dimension === "end") {
       updateEndEcology(delta);
@@ -3640,7 +3698,7 @@ const frame = (now: number): void => {
     timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
     syncTorchLights(now);
   }
-  findTarget();
+  syncTarget(now);
   updateMining(delta);
   viewmodel.tick(delta, mineHeld);
   viewmodel.root.visible = document.pointerLockElement === renderer.domElement && !anyStationOpen();
