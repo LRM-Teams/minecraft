@@ -366,14 +366,20 @@ const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
 
 type BlockFace = "side" | "top" | "bottom";
 const textureCache = new Map<string, THREE.Texture>();
-/** Distributable catalog icons for in-world block faces (CC0 atlas / singles). */
-const wikiBlockMaps = new Map<BlockType, THREE.Texture>();
+/** Block types that use distinct top/bottom vs side maps (true 6-face cubes). */
+const MULTI_FACE_BLOCKS: ReadonlySet<BlockType> = new Set<BlockType>([
+  "grass",
+  "wood",
+  "crafting_table",
+  "furnace",
+  "enchanting_table",
+  "bookshelf",
+  "bed",
+]);
 const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
 
-/** Build original 16px textures at runtime, keeping the game asset-free and crisp at every scale. */
+/** Build original 16px per-face textures at runtime (top/side/bottom), not inventory flats. */
 const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture => {
-  const wiki = wikiBlockMaps.get(type);
-  if (wiki) return wiki;
   const cacheKey = `${type}-${face}`;
   const cached = textureCache.get(cacheKey);
   if (cached) return cached;
@@ -441,14 +447,71 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture 
     }
   } else if (type === "bed") {
     const wood = new THREE.Color(colors.planks);
-    paint(wood);
-    paint(base, 0, 0, 16, 9);
-    for (let x = 0; x < 16; x += 2) paint(base.clone().multiplyScalar(0.85), x, 2, 1, 5);
+    if (face === "bottom") {
+      paint(wood);
+    } else if (face === "top") {
+      paint(base);
+      for (let x = 0; x < 16; x += 2) paint(base.clone().multiplyScalar(0.85), x, 2, 1, 12);
+      paint(wood, 0, 13, 16, 3);
+    } else {
+      paint(wood);
+      paint(base, 0, 0, 16, 9);
+      for (let x = 0; x < 16; x += 2) paint(base.clone().multiplyScalar(0.85), x, 2, 1, 5);
+    }
+  } else if (type === "wood" && (face === "top" || face === "bottom")) {
+    // Log ends: concentric growth rings (distinct from bark sides).
+    const pith = base.clone().multiplyScalar(1.15);
+    const ring = base.clone().multiplyScalar(0.55);
+    paint(pith);
+    for (let r = 6; r >= 1; r -= 1) {
+      const c = r % 2 === 0 ? ring : pith;
+      for (let y = 0; y < 16; y += 1) for (let x = 0; x < 16; x += 1) {
+        const dx = x - 7.5;
+        const dy = y - 7.5;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > r - 0.6 && d <= r + 0.4) paint(c, x, y, 1, 1);
+      }
+    }
+  } else if (type === "crafting_table" && face === "top") {
+    paint(base);
+    paint(base.clone().multiplyScalar(0.7), 2, 2, 12, 12);
+    paint(new THREE.Color(colors.planks).multiplyScalar(0.9), 4, 4, 8, 8);
+    paint(new THREE.Color(0x5a3a22), 7, 5, 2, 6);
+    paint(new THREE.Color(0x5a3a22), 5, 7, 6, 2);
+  } else if (type === "furnace") {
+    if (face === "top" || face === "bottom") {
+      paint(base.clone().multiplyScalar(0.85));
+      paint(base.clone().multiplyScalar(0.55), 3, 3, 10, 10);
+    } else {
+      paint(base);
+      paint(base.clone().multiplyScalar(0.55), 3, 3, 10, 10);
+      paint(new THREE.Color(0xff7a1a), 5, 8, 6, 4);
+      paint(new THREE.Color(0xffe08a), 6, 9, 4, 2);
+    }
+  } else if (type === "enchanting_table") {
+    if (face === "top") {
+      paint(base);
+      paint(new THREE.Color(0xc9a06a), 3, 2, 10, 10);
+      paint(new THREE.Color(0xe8e0ff), 6, 5, 4, 4);
+    } else if (face === "bottom") {
+      paint(new THREE.Color(0x2b2333));
+    } else {
+      paint(base);
+      paint(new THREE.Color(0x2b2333), 0, 12, 16, 4);
+    }
+  } else if (type === "bookshelf" && face !== "top" && face !== "bottom") {
+    paint(new THREE.Color(colors.planks));
+    for (let row = 0; row < 16; row += 4) {
+      paint(base, 1, row + 1, 14, 2);
+      paint(new THREE.Color(row % 8 === 0 ? 0xc43c3c : 0x1f4fd8), 2, row + 1, 3, 2);
+    }
+  } else if (type === "bookshelf") {
+    paint(new THREE.Color(colors.planks));
   } else {
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
       if (type === "planks" && (y % 6 === 0 || x === 0 || x === 8)) paint(base.clone().multiplyScalar(0.55), x, y, type === "planks" ? 2 : 1, type === "planks" ? 1 : 1);
-      else if (type === "wood" && (x % 5 === 0 || (face === "top" && noise(x, y) > 0.66))) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
+      else if (type === "wood" && x % 5 === 0) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
       else if (type === "bricks" && (y % 4 === 0 || (x + Math.floor(y / 4) * 4) % 8 === 0)) paint(base.clone().multiplyScalar(0.58), x, y, 2, 1);
       else if (type === "glass" && (x === y || x + y === 14 || noise(x, y) > 0.82)) paint(base.clone().multiplyScalar(1.22), x, y, 1, 1);
       else if (type === "water" && y % 5 === 0) paint(base.clone().multiplyScalar(1.3), x, y, 2, 1);
@@ -488,7 +551,8 @@ const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Ma
     depthWrite: type !== "water" && type !== "glass",
     vertexColors: false,
   });
-  if (type !== "grass") return material();
+  if (!MULTI_FACE_BLOCKS.has(type)) return material();
+  // BoxGeometry material order: +x -x +y -y +z -z → side, side, top, bottom, side, side
   const side = material("side");
   return [side, side, material("top"), material("bottom"), side, side];
 };
@@ -1503,38 +1567,8 @@ const renderHotbar = (): void => {
   heldIcon.classList.toggle("empty", !heldSrc || (inventory[type] ?? 0) <= 0);
 };
 renderHotbar();
-
-/** Load ship-safe distributable icons onto block faces (no restricted / wiki bytes). */
-const beginDistributableBlockMaps = (): void => {
-  const loader = new THREE.TextureLoader();
-  let pending = 0;
-  let settled = 0;
-  const maybeRefresh = (): void => {
-    settled += 1;
-    if (settled === pending) {
-      textureCache.clear();
-      syncRenderedChunks(true);
-    }
-  };
-  for (const type of BLOCK_TYPES) {
-    const src = iconFor(type);
-    if (!src) continue;
-    pending += 1;
-    loader.load(
-      src,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.magFilter = THREE.NearestFilter;
-        tex.minFilter = THREE.NearestFilter;
-        wikiBlockMaps.set(type, tex);
-        maybeRefresh();
-      },
-      undefined,
-      () => maybeRefresh(),
-    );
-  }
-};
-beginDistributableBlockMaps();
+// World blocks use runtime per-face maps (top/side/bottom). Inventory/hotbar icons
+// stay on the distributable atlas path via iconFor — never paste HUD flats onto cubes.
 
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 
