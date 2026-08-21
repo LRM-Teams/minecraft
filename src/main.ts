@@ -67,6 +67,7 @@ import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, load
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { PERF } from "./perf";
+import { createFpsSample, tickFps } from "./fps";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { BOX_FACES, type BlockFace } from "./blockFaces";
 import { beginBlockFaceAssets, blockFaceTexture } from "./blockAssets";
@@ -1932,9 +1933,7 @@ const keys = new Set<string>();
 let verticalVelocity = 0;
 let grounded = false;
 let lastTime = performance.now();
-let fpsFrames = 0;
-let fpsWindowStart = lastTime;
-let fpsDisplay = 0;
+const fpsSample = createFpsSample(lastTime);
 let dirty = false;
 let room: MultiplayerRoom | undefined;
 let awaitingRoomSnapshot = false;
@@ -3433,14 +3432,8 @@ const frame = (now: number): void => {
   if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
   if (tickAllBrewingStands(stations, delta) && stations.brewOpen) refreshStationsUi();
   if (!rendererLost) renderer.render(scene, camera);
-  fpsFrames += 1;
-  const elapsed = now - fpsWindowStart;
-  if (elapsed >= 500) {
-    fpsDisplay = Math.round((fpsFrames * 1000) / elapsed);
-    fpsHud.textContent = `${fpsDisplay} FPS`;
-    fpsFrames = 0;
-    fpsWindowStart = now;
-  }
+  const fpsLabel = tickFps(fpsSample, now);
+  if (fpsLabel) fpsHud.textContent = fpsLabel;
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);
