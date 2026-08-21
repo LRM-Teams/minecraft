@@ -19,6 +19,9 @@ describe("perf presets (LRM-1613)", () => {
     expect(cfg.maxChunkGensPerFrame).toBeGreaterThan(0);
     expect(cfg.meshChunkRadius).toBeLessThanOrEqual(cfg.streamChunkRadius);
     expect(cfg.meshChunkRadius).toBeLessThanOrEqual(1);
+    expect(cfg.simpleBlockMaterials).toBe(true);
+    expect(cfg.skyDecor).toBe(false);
+    expect(cfg.skySyncEveryMs).toBeGreaterThan(0);
     expect(cfg.torchSyncEveryMs).toBeGreaterThan(0);
   });
 
@@ -29,7 +32,10 @@ describe("perf presets (LRM-1613)", () => {
     };
     expect(resolvePerfPreset("?perf=performance", store).id).toBe("performance");
     expect(PERF_PRESETS.performance.shadowsEnabled).toBe(false);
+    expect(PERF_PRESETS.performance.simpleBlockMaterials).toBe(true);
     expect(PERF_PRESETS.quality.shadowsEnabled).toBe(true);
+    expect(PERF_PRESETS.quality.simpleBlockMaterials).toBe(false);
+    expect(PERF_PRESETS.quality.skyDecor).toBe(true);
     expect(PERF_PRESETS.quality.maxTorchLights).toBe(14);
   });
 

@@ -33,13 +33,22 @@ export type PerfConfig = {
   torchSyncEveryMs: number;
   /** devicePixelRatio cap. */
   maxPixelRatio: number;
+  /**
+   * Single MeshBasicMaterial per bucket (1 draw/mesh) instead of 6-face Lambert.
+   * Huge SwiftShader win; torch point lights no longer shade terrain.
+   */
+  simpleBlockMaterials: boolean;
+  /** Cloud billboards + star field (expensive Points + transparent meshes). */
+  skyDecor: boolean;
+  /** How often to refresh sun/moon/sky uniforms (ms). */
+  skySyncEveryMs: number;
 };
 
 export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
   performance: {
     id: "performance",
     label: "性能",
-    streamChunkRadius: 2,
+    streamChunkRadius: 1,
     meshChunkRadius: 1,
     maxChunkGensPerFrame: 1,
     maxChunkBuildsPerFrame: 1,
@@ -48,16 +57,18 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     softShadows: false,
     terrainCastShadow: false,
     terrainReceiveShadow: false,
-    maxTorchLights: 4,
-    torchSearchRadius: 18,
-    torchSyncEveryMs: 200,
-    maxPixelRatio: 1.25,
+    maxTorchLights: 2,
+    torchSearchRadius: 14,
+    torchSyncEveryMs: 320,
+    maxPixelRatio: 1,
+    simpleBlockMaterials: true,
+    skyDecor: false,
+    skySyncEveryMs: 250,
   },
   balanced: {
     id: "balanced",
     label: "均衡",
-    streamChunkRadius: 2,
-    // Mesh 1 chunk closer than stream — cuts ~60% InstancedMesh draw calls vs radius 2.
+    streamChunkRadius: 1,
     meshChunkRadius: 1,
     maxChunkGensPerFrame: 1,
     maxChunkBuildsPerFrame: 1,
@@ -66,10 +77,13 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     softShadows: false,
     terrainCastShadow: false,
     terrainReceiveShadow: false,
-    maxTorchLights: 4,
-    torchSearchRadius: 18,
-    torchSyncEveryMs: 220,
-    maxPixelRatio: 1.25,
+    maxTorchLights: 2,
+    torchSearchRadius: 16,
+    torchSyncEveryMs: 280,
+    maxPixelRatio: 1,
+    simpleBlockMaterials: true,
+    skyDecor: false,
+    skySyncEveryMs: 200,
   },
   quality: {
     id: "quality",
@@ -87,6 +101,9 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     torchSearchRadius: 28,
     torchSyncEveryMs: 100,
     maxPixelRatio: 2,
+    simpleBlockMaterials: false,
+    skyDecor: true,
+    skySyncEveryMs: 33,
   },
 };
 
