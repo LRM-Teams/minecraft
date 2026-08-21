@@ -12,22 +12,12 @@ import {
   type WitherBoss,
   type WitherSkull,
 } from "./wither";
-import { craftBricks, craftPlanks, createInventory, createStarterInventory, type Inventory } from "./inventory";
-import { breakDuration, isMineable } from "./mining";
-import { Soundscape } from "./sound";
-import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
-import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
-import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
-import { biomeAt, type BiomeVariant } from "./biomes";
-import { BOX_FACES, type BlockFace } from "./blockFaces";
 import {
-  DEFAULT_HOTBAR,
   HOTBAR_SIZE,
   HOTBAR_TAG,
   clampHotbarIndex,
-  hotbarTypeAt,
 } from "./hotbar";
-import { ITEM_LABELS, SWORD_DAMAGE, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
+import { ITEM_LABELS, SWORD_DAMAGE, isBlockType, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
 import { iconFor, iconLabel } from "./icons";
 import {
   EXHAUSTION,
@@ -48,6 +38,36 @@ import {
   type FoodId,
   type HungerState,
 } from "./hunger";
+import {
+  craftBricks,
+  craftPlanks,
+  countsFromSlots,
+  createStarterSlots,
+  heldStack,
+  hotbarSlotIndex,
+  HOTBAR_START,
+  linkInventory,
+  restorePlayerSlots,
+  snapshotSlots,
+  takeHotbarDrop,
+  type Inventory,
+  type InvSlot,
+} from "./inventory";
+import {
+  createDroppedItem,
+  restoreDrops,
+  snapshotDrops,
+  tickDrops,
+  tryPickupDrops,
+  type DroppedItem,
+} from "./drops";
+import { breakDuration, isMineable } from "./mining";
+import { Soundscape } from "./sound";
+import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
+import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
+import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { biomeAt, type BiomeVariant } from "./biomes";
+import { BOX_FACES, type BlockFace } from "./blockFaces";
 import {
   createArmorState,
   formatArmorBar,
@@ -169,7 +189,7 @@ app.innerHTML = `
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
     <div id="held-icon" aria-hidden="true"></div>
-    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · 左键挖掘 · 右键放置（手持方块优先）· 1–9 热键 · E 合成 · R 工具 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · 左键挖掘 · 右键放置 · 1–9 热键 · E 背包 · Q 丢弃 · R 工具 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -178,7 +198,7 @@ app.innerHTML = `
     <div id="brew-panel" class="station-panel hidden"></div>
     <aside id="codex" class="hidden">
       <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
-      <p>对标原版：背包 <kbd>E</kbd> 开 2×2 合成；放置工作台后右键开 3×3；熔炉烧炼矿石/沙子。</p>
+      <p>对标原版：<kbd>E</kbd> 打开完整背包格子（可拖拽）与 2×2 合成；放置工作台后右键开 3×3；<kbd>Q</kbd> 丢弃手持物品，靠近自动拾取。</p>
       <p>流程：原木→木板→木棍→工作台→熔炉→烧锭→铁/金/钻工具；煤/木炭+木棍→火把；羊毛×3+木板×3→床。</p>
       <div class="recipe"><kbd>C</kbd> 原木 → 木板 ×4（快捷）</div>
       <div class="recipe"><kbd>V</kbd> 石头 ×4 → 石砖 ×4（快捷）</div>
@@ -1404,20 +1424,51 @@ const playerNameInput = document.querySelector<HTMLInputElement>("#player-name")
 const joinRoomButton = document.querySelector<HTMLButtonElement>("#join-room")!;
 const roomStatus = document.querySelector<HTMLElement>("#room-status")!;
 let selected = clampHotbarIndex(saved?.player.selected ?? 0);
-/** Mutable 9-slot hotbar bindings (wiki-recognisable placeables by default). */
-const hotbarSlots: BlockType[] = [...DEFAULT_HOTBAR];
-const heldBlock = (): BlockType => hotbarTypeAt(hotbarSlots, selected);
+/** Source-of-truth 36 inventory cells (27 main + 9 hotbar). */
+let playerSlots: InvSlot[] = restorePlayerSlots(saved?.player.slots, saved?.player.inventory);
+/** Count-map view linked to slots — craft/furnace/etc. keep mutating this. */
+let inventory: Inventory = linkInventory(playerSlots);
+/** Ground item entities. */
+let worldDrops: DroppedItem[] = restoreDrops(saved?.player.drops);
+const dropMeshes = new Map<number, THREE.Mesh>();
+const dropGeometry = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+const dropMaterial = new THREE.MeshLambertMaterial({ color: 0xf2db83 });
+
+const heldStackAt = () => heldStack(playerSlots, selected);
+const heldBlock = (): BlockType | undefined => {
+  const stack = heldStackAt();
+  if (!stack || !isBlockType(stack.item)) return undefined;
+  return stack.item;
+};
+const heldCount = (): number => heldStackAt()?.count ?? 0;
 const bindHotbar = (type: BlockType): void => {
-  const existing = hotbarSlots.indexOf(type);
-  if (existing >= 0) {
-    selected = existing;
+  for (let i = 0; i < HOTBAR_SIZE; i += 1) {
+    if (playerSlots[HOTBAR_START + i]?.item === type) {
+      selected = i;
+      return;
+    }
+  }
+  const emptyHot = Array.from({ length: HOTBAR_SIZE }, (_, i) => HOTBAR_START + i).find((i) => !playerSlots[i]);
+  const source = playerSlots.findIndex((slot) => slot?.item === type);
+  if (source < 0) return;
+  if (emptyHot !== undefined) {
+    playerSlots[emptyHot] = playerSlots[source];
+    playerSlots[source] = null;
+    selected = emptyHot - HOTBAR_START;
     return;
   }
-  hotbarSlots[selected] = type;
+  const idx = hotbarSlotIndex(selected);
+  const swap = playerSlots[idx];
+  playerSlots[idx] = playerSlots[source];
+  playerSlots[source] = swap;
 };
-let inventory: Inventory = saved?.player.inventory
-  ? createInventory(saved.player.inventory)
-  : createStarterInventory();
+const consumeHeldOne = (): boolean => {
+  const idx = hotbarSlotIndex(selected);
+  const stack = playerSlots[idx];
+  if (!stack || stack.count < 1) return false;
+  playerSlots[idx] = stack.count <= 1 ? null : { item: stack.item, count: stack.count - 1 };
+  return true;
+};
 const stations = createStations();
 const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
@@ -1530,30 +1581,89 @@ syncRenderedChunks(true);
 syncDimensionState();
 
 const renderHotbar = (): void => {
-  hotbar.innerHTML = hotbarSlots.map((type, index) => {
-    const count = inventory[type] ?? 0;
-    const empty = count <= 0 ? " empty" : "";
+  hotbar.innerHTML = Array.from({ length: HOTBAR_SIZE }, (_, index) => {
+    const stack = playerSlots[HOTBAR_START + index];
+    const type = stack?.item;
+    const count = stack?.count ?? 0;
+    const empty = !stack || count <= 0 ? " empty" : "";
     const selectedClass = index === selected ? " selected" : "";
-    const tag = HOTBAR_TAG[type] ?? type.slice(0, 1);
-    const title = iconLabel(type, labels[type]);
-    const src = iconFor(type);
+    const tag = type ? (HOTBAR_TAG[type as BlockType] ?? type.slice(0, 1)) : "";
+    const title = type ? iconLabel(type, ITEM_LABELS[type] ?? labels[type as BlockType] ?? type) : "空";
+    const src = type ? iconFor(type) : null;
     const face = src
       ? `<img class="icon" src="${src}" alt="${title}" draggable="false" />`
-      : `<span class="swatch ${type}"></span>`;
-    return `<div class="slot${selectedClass}${empty}" title="${title}"><span class="key">${index + 1}</span><span class="tag">${tag}</span>${face}<small>${count}</small></div>`;
+      : type && isBlockType(type)
+        ? `<span class="swatch ${type}"></span>`
+        : "";
+    return `<div class="slot${selectedClass}${empty}" title="${title}"><span class="key">${index + 1}</span><span class="tag">${tag}</span>${face}<small>${count || ""}</small></div>`;
   }).join("");
-  const type = heldBlock();
+  const stack = heldStackAt();
+  const type = stack?.item;
   const toolLabel = stations.equippedTool ? ` · 工具 ${ITEM_LABELS[stations.equippedTool]}` : "";
-  status.textContent = `${iconLabel(type, labels[type])} · ${inventory[type]}${toolLabel}`;
-  const heldSrc = iconFor(type);
+  status.textContent = type
+    ? `${iconLabel(type, ITEM_LABELS[type] ?? type)} · ${stack!.count}${toolLabel}`
+    : `空手${toolLabel}`;
+  const heldSrc = type ? iconFor(type) : null;
   heldIcon.innerHTML = heldSrc
-    ? `<img src="${heldSrc}" alt="${iconLabel(type, labels[type])}" draggable="false" />`
+    ? `<img src="${heldSrc}" alt="${iconLabel(type!, ITEM_LABELS[type!] ?? type!)}" draggable="false" />`
     : "";
-  heldIcon.classList.toggle("empty", !heldSrc || (inventory[type] ?? 0) <= 0);
+  heldIcon.classList.toggle("empty", !heldSrc);
 };
 renderHotbar();
 
 /** HUD icons stay on the hotbar; world meshes use procedural six-face textures only (LRM-1604). */
+
+const clearDropMeshes = (): void => {
+  dropMeshes.forEach((mesh) => scene.remove(mesh));
+  dropMeshes.clear();
+};
+
+const syncDropMeshes = (): void => {
+  const alive = new Set(worldDrops.map((drop) => drop.id));
+  dropMeshes.forEach((mesh, id) => {
+    if (!alive.has(id)) {
+      scene.remove(mesh);
+      dropMeshes.delete(id);
+    }
+  });
+  for (const drop of worldDrops) {
+    let mesh = dropMeshes.get(drop.id);
+    if (!mesh) {
+      mesh = new THREE.Mesh(dropGeometry, dropMaterial.clone());
+      (mesh.material as THREE.MeshLambertMaterial).color.setHex(
+        isBlockType(drop.item) ? 0x9ad0a0 : 0xf2db83,
+      );
+      scene.add(mesh);
+      dropMeshes.set(drop.id, mesh);
+    }
+    const bob = Math.sin(drop.age * 4) * 0.06;
+    mesh.position.set(drop.x, drop.y + bob, drop.z);
+    mesh.rotation.y = drop.age * 1.5;
+  }
+};
+
+const updateDropsLoop = (delta: number): void => {
+  const groundY = (x: number, z: number): number => {
+    if (dimension === "nether") return nether.topY(Math.round(x), Math.round(z));
+    if (dimension === "end") return endWorld.topY(Math.round(x), Math.round(z));
+    return world.topY(Math.round(x), Math.round(z));
+  };
+  tickDrops(worldDrops, delta, groundY);
+  const picked = tryPickupDrops(
+    worldDrops,
+    playerSlots,
+    { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+    1.45,
+  );
+  if (picked.length) {
+    soundscape.play("pickup");
+    renderHotbar();
+    dirty = true;
+    const last = picked[picked.length - 1]!;
+    status.textContent = `拾取 ${ITEM_LABELS[last.item]} ×${last.count}`;
+  }
+  syncDropMeshes();
+};
 
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 
@@ -1584,7 +1694,7 @@ const refreshStationsUi = (): void => {
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
   enchantPanel.classList.toggle("hidden", !stations.enchantOpen);
   brewPanel.classList.toggle("hidden", !stations.brewOpen);
-  if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor);
+  if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor, playerSlots);
   if (stations.furnaceOpen) {
     const furnace = activeFurnace(stations);
     if (furnace) furnacePanel.innerHTML = renderFurnacePanelHtml(furnace, inventory);
@@ -1778,7 +1888,9 @@ const playerSave = (): PlayerSave => ({
   yaw,
   pitch,
   selected,
-  inventory,
+  inventory: countsFromSlots(playerSlots),
+  slots: snapshotSlots(playerSlots),
+  drops: snapshotDrops(worldDrops),
   dimension,
   nether: nether.snapshot(),
   end: endWorld.snapshot(),
@@ -1980,7 +2092,7 @@ const edit = (place: boolean): void => {
     }
   } else {
     const type = heldBlock();
-    const result = tryPlaceBlock(world, type, inventory[type] ?? 0, target, {
+    const result = tryPlaceBlock(world, type, heldCount(), target, {
       yaw,
       intersectsPlayer,
       labelFor: (block) => labels[block],
@@ -1989,7 +2101,7 @@ const edit = (place: boolean): void => {
       status.textContent = result.message;
       return;
     }
-    inventory[result.type] -= 1;
+    consumeHeldOne();
     soundscape.play("place");
     room?.sendEdit({ action: "place", position: result.position, type: result.type });
   }
@@ -2058,7 +2170,11 @@ const renderWorldSlots = (): void => {
 const applyWorldSlot = (slot: WorldSlot): void => {
   activeWorldId = slot.id;
   world = VoxelWorld.fromSnapshot(slot.save.world);
-  inventory = createInventory(slot.save.player.inventory);
+  playerSlots = restorePlayerSlots(slot.save.player.slots, slot.save.player.inventory);
+  inventory = linkInventory(playerSlots);
+  clearDropMeshes();
+  worldDrops = restoreDrops(slot.save.player.drops);
+  syncDropMeshes();
   selected = clampHotbarIndex(slot.save.player.selected);
   yaw = slot.save.player.yaw;
   pitch = slot.save.player.pitch;
@@ -2117,20 +2233,25 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   status.textContent = `已载入 ${slot.name}`;
 };
 
-const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => ({
-  position: [0, nextWorld.topY(0, 0) + 1.72, 8],
-  yaw: 0,
-  pitch: -0.18,
-  selected: 0,
-  inventory: createStarterInventory(),
-  dimension: "overworld",
-  nether: new NetherWorld(nextWorld.seed).snapshot(),
-  end: new EndWorld(nextWorld.seed).snapshot(),
-  endCleared: false,
-  witherStars: 0,
-  spawnPoint: undefined,
-  dayPhaseMs: 0,
-});
+const freshPlayer = (nextWorld: VoxelWorld): PlayerSave => {
+  const slots = createStarterSlots();
+  return {
+    position: [0, nextWorld.topY(0, 0) + 1.72, 8],
+    yaw: 0,
+    pitch: -0.18,
+    selected: 0,
+    inventory: countsFromSlots(slots),
+    slots: snapshotSlots(slots),
+    drops: [],
+    dimension: "overworld",
+    nether: new NetherWorld(nextWorld.seed).snapshot(),
+    end: new EndWorld(nextWorld.seed).snapshot(),
+    endCleared: false,
+    witherStars: 0,
+    spawnPoint: undefined,
+    dayPhaseMs: 0,
+  };
+};
 
 const createNewWorld = (name: string): void => {
   const nextWorld = new VoxelWorld(Math.floor(Math.random() * 999999));
@@ -2235,7 +2356,7 @@ renderer.domElement.addEventListener("mousedown", (event) => {
   if (event.button === 2) {
     if (dimension === "overworld" && target) {
       const aimed = world.get(target.position.x, target.position.y, target.position.z);
-      const holdingPlaceable = inventory[heldBlock()] > 0;
+      const holdingPlaceable = heldCount() > 0 && Boolean(heldBlock());
       // When holding a placeable block, placement wins over redstone/bed toggles
       // (fixes silent "can't place" when aiming at levers / interactive blocks).
       if (!holdingPlaceable) {
@@ -2352,7 +2473,7 @@ renderer.domElement.addEventListener("mousedown", (event) => {
     const nearVillager = villagers.find((v) =>
       !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange,
     );
-    if (nearVillager && inventory[heldBlock()] <= 0) {
+    if (nearVillager && heldCount() <= 0) {
       interactVillager();
       return;
     }
@@ -2414,7 +2535,32 @@ document.addEventListener("keydown", (event) => {
     }
     refreshStationsUi();
     renderHotbar();
-    status.textContent = stations.craftOpen ? "背包合成 2×2" : "合成已关闭";
+    status.textContent = stations.craftOpen ? "背包已打开 · 拖拽整理格子" : "背包已关闭";
+  }
+  if (event.code === "KeyQ" && !event.repeat) {
+    if (anyStationOpen()) return;
+    if (document.pointerLockElement !== renderer.domElement) return;
+    soundscape.unlock();
+    const dropped = takeHotbarDrop(playerSlots, selected, event.ctrlKey || event.metaKey);
+    if (!dropped) {
+      status.textContent = "热键栏为空，无法丢弃";
+      return;
+    }
+    const forwardX = -Math.sin(yaw);
+    const forwardZ = -Math.cos(yaw);
+    worldDrops.push(
+      createDroppedItem(dropped, {
+        x: camera.position.x + forwardX * 0.9,
+        y: camera.position.y - 0.2,
+        z: camera.position.z + forwardZ * 0.9,
+      }, { pickupDelay: 0.5 }),
+    );
+    syncDropMeshes();
+    renderHotbar();
+    dirty = true;
+    persist();
+    status.textContent = `丢弃 ${ITEM_LABELS[dropped.item]} ×${dropped.count}`;
+    soundscape.play("break");
   }
   if (event.code === "KeyR" && !event.repeat) {
     const tools = (Object.entries(inventory) as [ExtraItem | string, number][])
@@ -2995,6 +3141,7 @@ const frame = (now: number): void => {
   lastTime = now;
   if (document.pointerLockElement === renderer.domElement) {
     updatePlayer(delta);
+    updateDropsLoop(delta);
     if (dimension === "overworld") {
       tryEnterPortal();
       syncWitherMinionTags();
@@ -3051,7 +3198,11 @@ requestAnimationFrame(frame);
 const applyCraftPanelClick = (event: MouseEvent, button: "left" | "right"): void => {
   const target = event.target as HTMLElement;
   const beforeArmor = { ...armor };
-  if (!handleCraftClick(stations, inventory, target, armor, { button, shift: event.shiftKey })) return;
+  if (!handleCraftClick(stations, inventory, target, armor, {
+    button,
+    shift: event.shiftKey,
+    playerSlots,
+  })) return;
   for (const slot of ["helmet", "chestplate", "leggings", "boots"] as const) {
     if (beforeArmor[slot] && !armor[slot]) enchantState.armorEnchants[slot] = [];
     if (armor[slot] && armor[slot] !== beforeArmor[slot]) {
