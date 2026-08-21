@@ -1,48 +1,43 @@
 # Frontend integration (icons)
 
-## Mapping
+## Ship path (LRM-1602)
 
-Load `assets/icons/mapping.json`:
+Production / GitHub Pages must use **distributable only**:
 
-```ts
-type IconMap = Record<string, {
-  texture: string | null;   // repo-relative, e.g. cache/restricted/grass.png
-  icon_url: string | null;  // wiki CDN URL (attribution still required)
-  license: string;
-  bucket: "distributable" | "restricted" | "unknown";
-  zh_name: string;
-  en_name: string;
-}>;
+```bash
+python3 tools/icon-scrape/gen_distributable.py   # needs Pillow
 ```
 
-Resolve HUD / hotbar / inventory slots with `itemId → texture`:
+Outputs:
+
+- `assets/icons/cache/distributable/<item_id>.png`
+- `assets/icons/atlas.png` + `atlas.json`
+- `assets/icons/mapping.json` (`bucket: "distributable"`, `license: "cc0-original-procedural"`)
+- `assets/icons/licenses/DISTRIBUTABLE.md` + `ATTRIBUTION.md`
+
+`src/icons.ts` globs **only** `cache/distributable/**` and imports `atlas.png` —
+`cache/restricted/` is never in the Vite graph.
+
+## Mapping
 
 ```ts
-import mapping from "../../assets/icons/mapping.json";
+import { iconFor, iconAtlasFrame, iconAtlasUrl, iconLabel } from "./icons";
 
-export function iconFor(itemId: string): string | null {
-  const row = (mapping.items as IconMap)[itemId];
-  if (!row || row.bucket === "unknown") return null;
-  // Prefer local cache in Vite:
-  return row.texture ? new URL(`../../assets/icons/${row.texture}`, import.meta.url).href : row.icon_url;
-}
+iconFor("grass");        // → Vite URL under cache/distributable/
+iconAtlasFrame("grass"); // → { x, y, w, h, u, v, u2, v2 }
+iconAtlasUrl();          // → atlas.png URL
 ```
 
 ## Atlas vs single images
 
-- **Phase 1 (this Issue):** single PNGs under `cache/restricted/` — simplest for Vite `import.meta.url` or static copy into `public/icons/`.
-- **Phase 2:** pack a texture atlas (e.g. 16×16 cells) from `distributable/` only once legal clears; keep `mapping.json` pointing at atlas UV, not raw wiki URLs.
-- Do **not** hotlink wiki CDN in production builds long-term (fragile + unclear redistribution). Local restricted cache is for prototyping “recognizable items”.
+- **HUD / hotbar:** `iconFor(itemId)` (single PNG).
+- **Batch / sprites:** `iconAtlasFrame` UV on `atlas.png`.
+- Do **not** hotlink wiki CDN. Do **not** import `cache/restricted/`.
 
-## Naming
-
-Game IDs stay snake_case (`diamond_pickaxe`). Files are `cache/<bucket>/<item_id>.<ext>`.
-`texture_key` in the catalog is `icons/<item_id>` for future atlas keys.
-
-## License gate in UI code
+## License gate
 
 ```ts
 if (row.bucket !== "distributable") {
-  // OK for internal preview builds; gate public ships behind legal review.
+  // Must not ship — restricted is local scrape reference only.
 }
 ```

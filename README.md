@@ -34,11 +34,13 @@ npm run dev
 
 联机 MVP 使用浏览器原生 `BroadcastChannel`，并在其不可用时回退到 `localStorage` 事件，因此当前适用于同一网站来源下的双标签页联调。跨设备公网房间与服务端权威同步属于后续联机增强阶段。
 
-## 图标 / 贴图素材管线（数据收集）
+## 图标 / 贴图素材管线
 
-可重复的 wiki 采集脚本在 `tools/icon-scrape/`（见该目录 README）。产物在 `assets/icons/`：结构化清单、`itemId→纹理` 映射，以及按许可隔离的本地缓存（`distributable` / `restricted` / `unknown`）。当前缓存为 wiki 可引用图，标记为受限参考素材，**不作为可分发官方贴图入库**。
+- Wiki 采集（参考）：`tools/icon-scrape/collect.py` → `cache/restricted/`（`restricted-mojang-via-wiki`，不上线）
+- 可分发原作：`tools/icon-scrape/gen_distributable.py` → `cache/distributable/` + `atlas.png` / `atlas.json`（`cc0-original-procedural`）
+- 前端：`src/icons.ts` 只 Vite-glob distributable；热键栏 / 手持预览 / 世界方块面走 ship 路径；Pages `dist` 不含 restricted
 
-前端通过 `src/icons.ts` 读取 `mapping.json`：热键栏与准星下手持预览使用可辨识图标；世界方块面在预览构建中加载同一缓存（仍落在 `cache/restricted/`，不迁入 `cache/distributable/`）。正式对外分发需待许可清理后再切 atlas。
+详见 `tools/icon-scrape/FRONTEND.md` 与 `assets/icons/licenses/DISTRIBUTABLE.md`。
 
 ## 质量检查
 
