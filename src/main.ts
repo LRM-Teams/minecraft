@@ -173,7 +173,7 @@ import {
 } from "./end";
 import { createEnderDragon, hitEnderDragon, updateEnderDragon } from "./enderDragon";
 import { createCrackOverlay, createViewmodel } from "./viewmodel";
-import { eyeOnFloor, findStandFloor, walkEyeY } from "./playerMove";
+import { clipEyeAgainstCeiling, eyeOnFloor, findStandFloor, walkEyeY } from "./playerMove";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -2786,6 +2786,17 @@ const updatePlayer = (delta: number): void => {
   }
   if (!onLadder) verticalVelocity -= 19 * delta;
   camera.position.y += verticalVelocity * delta;
+  const ceiling = clipEyeAgainstCeiling(
+    currentIsSolid,
+    camera.position.x,
+    camera.position.z,
+    camera.position.y,
+    verticalVelocity > 0,
+  );
+  if (ceiling.bumped) {
+    camera.position.y = ceiling.eyeY;
+    verticalVelocity = 0;
+  }
   const standFloorY = findStandFloor(
     currentIsSolid,
     camera.position.x,
