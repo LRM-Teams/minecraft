@@ -23,6 +23,7 @@ describe("perf presets (LRM-1613)", () => {
     expect(cfg.skyDecor).toBe(false);
     expect(cfg.skySyncEveryMs).toBeGreaterThan(0);
     expect(cfg.torchSyncEveryMs).toBeGreaterThan(0);
+    expect(cfg.maxPixelRatio).toBeLessThanOrEqual(1);
   });
 
   it("honors ?perf= query over storage", () => {
