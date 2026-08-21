@@ -1,0 +1,868 @@
+{
+  "schema_version": 1,
+  "description": "itemId → texture mapping for HUD / hotbar / inventory.",
+  "default_extension": ".png",
+  "cache_layout": {
+    "distributable": "assets/icons/cache/distributable/<item_id>.<ext>",
+    "restricted": "assets/icons/cache/restricted/<item_id>.<ext>",
+    "unknown": "assets/icons/cache/unknown/<item_id>.json (stub only)"
+  },
+  "items": {
+    "grass": {
+      "texture": "cache/restricted/grass.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Grass_Block_JE7_BE6.png?d27c1",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "草方块",
+      "en_name": "Grass Block"
+    },
+    "dirt": {
+      "texture": "cache/restricted/dirt.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Dirt_JE2_BE2.png?a4b3d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "泥土",
+      "en_name": "Dirt"
+    },
+    "stone": {
+      "texture": "cache/restricted/stone.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_JE5_BE3.png?33434",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石头",
+      "en_name": "Stone"
+    },
+    "wood": {
+      "texture": "cache/restricted/wood.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Oak_Log_Axis_Y_JE5_BE3.png?da15a",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "原木",
+      "en_name": "Oak Log"
+    },
+    "planks": {
+      "texture": "cache/restricted/planks.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Oak_Planks_JE9_BE3.png?2a459",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木板",
+      "en_name": "Oak Planks"
+    },
+    "leaves": {
+      "texture": "cache/restricted/leaves.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Oak_Leaves_JE4.png?77e67",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "树叶",
+      "en_name": "Oak Leaves"
+    },
+    "sand": {
+      "texture": "cache/restricted/sand.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Sand_JE5_BE3.png?97c2c",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "沙子",
+      "en_name": "Sand"
+    },
+    "water": {
+      "texture": "cache/restricted/water.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Water_JE16.png?6cccc",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "水",
+      "en_name": "Water"
+    },
+    "bricks": {
+      "texture": "cache/restricted/bricks.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Bricks_JE3_BE2.png?e3b13",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石砖",
+      "en_name": "Stone Bricks"
+    },
+    "glass": {
+      "texture": "cache/restricted/glass.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Glass_JE4_BE4.png?ead50",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "玻璃",
+      "en_name": "Glass"
+    },
+    "coal_ore": {
+      "texture": "cache/restricted/coal_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Coal_Ore_JE5_BE4.png?a343c",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "煤矿石",
+      "en_name": "Coal Ore"
+    },
+    "copper_ore": {
+      "texture": "cache/restricted/copper_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Copper_Ore_JE2_BE2.png?b6ae0",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铜矿石",
+      "en_name": "Copper Ore"
+    },
+    "iron_ore": {
+      "texture": "cache/restricted/iron_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Ore_JE6_BE4.png?92763",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁矿石",
+      "en_name": "Iron Ore"
+    },
+    "gold_ore": {
+      "texture": "cache/restricted/gold_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Gold_Ore_JE7_BE4.png?dd555",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金矿石",
+      "en_name": "Gold Ore"
+    },
+    "diamond_ore": {
+      "texture": "cache/restricted/diamond_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Ore_JE5_BE5.png?73a76",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石矿石",
+      "en_name": "Diamond Ore"
+    },
+    "lapis_ore": {
+      "texture": "cache/restricted/lapis_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Lapis_Lazuli_Ore_JE4_BE4.png?d85b6",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "青金石矿",
+      "en_name": "Lapis Lazuli Ore"
+    },
+    "redstone_ore": {
+      "texture": "cache/restricted/redstone_ore.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Ore_JE4_BE3.png?d2049",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "红石矿",
+      "en_name": "Redstone Ore"
+    },
+    "obsidian": {
+      "texture": "cache/restricted/obsidian.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Obsidian_JE3_BE2.png?31e17",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "黑曜石",
+      "en_name": "Obsidian"
+    },
+    "crafting_table": {
+      "texture": "cache/restricted/crafting_table.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Crafting_Table_JE4_BE3.png?738c8",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "工作台",
+      "en_name": "Crafting Table"
+    },
+    "furnace": {
+      "texture": "cache/restricted/furnace.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Furnace_%28S%29_JE8.png?fa497",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "熔炉",
+      "en_name": "Furnace"
+    },
+    "enchanting_table": {
+      "texture": "cache/restricted/enchanting_table.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Enchanting_Table_JE4_BE2.png?32e81",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "附魔台",
+      "en_name": "Enchanting Table"
+    },
+    "bookshelf": {
+      "texture": "cache/restricted/bookshelf.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Bookshelf_JE4_BE2.png?21f85",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "书架",
+      "en_name": "Bookshelf"
+    },
+    "brewing_stand": {
+      "texture": "cache/restricted/brewing_stand.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Brewing_Stand_JE4_BE3.png?2a6e0",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "酿造台",
+      "en_name": "Brewing Stand"
+    },
+    "torch": {
+      "texture": "cache/restricted/torch.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Torch_JE4_BE2.png?b6520",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "火把",
+      "en_name": "Torch"
+    },
+    "wool": {
+      "texture": "cache/restricted/wool.png",
+      "icon_url": "https://zh.minecraft.wiki/images/White_Wool_JE2_BE2.png?281c1",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "羊毛",
+      "en_name": "White Wool"
+    },
+    "bed": {
+      "texture": "cache/restricted/bed.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Red_Bed_%28N%29_JE4.png?553e8",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "床",
+      "en_name": "Red Bed"
+    },
+    "redstone_dust": {
+      "texture": "cache/restricted/redstone_dust.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Dust_JE2_BE2.png?030c0",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "红石粉",
+      "en_name": "Redstone Dust"
+    },
+    "lever": {
+      "texture": "cache/restricted/lever.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Lever_JE3_BE2.png?5d96e",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "拉杆",
+      "en_name": "Lever"
+    },
+    "redstone_torch": {
+      "texture": "cache/restricted/redstone_torch.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Torch_JE5.png?86adf",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "红石火把",
+      "en_name": "Redstone Torch"
+    },
+    "redstone_lamp": {
+      "texture": "cache/restricted/redstone_lamp.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Lamp_JE3_BE2.png?41a41",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "红石灯",
+      "en_name": "Redstone Lamp"
+    },
+    "stick": {
+      "texture": "cache/restricted/stick.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stick_JE1_BE1.png?2ab19",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木棍",
+      "en_name": "Stick"
+    },
+    "coal": {
+      "texture": "cache/restricted/coal.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Coal_JE3_BE2.png?b473d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "煤炭",
+      "en_name": "Coal"
+    },
+    "charcoal": {
+      "texture": "cache/restricted/charcoal.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Charcoal_JE3_BE3.png?a0b32",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木炭",
+      "en_name": "Charcoal"
+    },
+    "iron_ingot": {
+      "texture": "cache/restricted/iron_ingot.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Ingot_JE3_BE2.png?a0c64",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁锭",
+      "en_name": "Iron Ingot"
+    },
+    "gold_ingot": {
+      "texture": "cache/restricted/gold_ingot.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Gold_Ingot_JE4_BE2.png?bd10b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金锭",
+      "en_name": "Gold Ingot"
+    },
+    "copper_ingot": {
+      "texture": "cache/restricted/copper_ingot.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Copper_Ingot_JE2_BE1.png?1772e",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铜锭",
+      "en_name": "Copper Ingot"
+    },
+    "diamond": {
+      "texture": "cache/restricted/diamond.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_JE2_BE2.png?36a4d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石",
+      "en_name": "Diamond"
+    },
+    "wooden_pickaxe": {
+      "texture": "cache/restricted/wooden_pickaxe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Pickaxe_JE3_BE3.png?82b30",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木镐",
+      "en_name": "Wooden Pickaxe"
+    },
+    "stone_pickaxe": {
+      "texture": "cache/restricted/stone_pickaxe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Pickaxe_JE2_BE2.png?47567",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石镐",
+      "en_name": "Stone Pickaxe"
+    },
+    "iron_pickaxe": {
+      "texture": "cache/restricted/iron_pickaxe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Pickaxe_JE3_BE2.png?49cf2",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁镐",
+      "en_name": "Iron Pickaxe"
+    },
+    "gold_pickaxe": {
+      "texture": "cache/restricted/gold_pickaxe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Golden_Pickaxe_JE4_BE3.png?79864",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金镐",
+      "en_name": "Golden Pickaxe"
+    },
+    "diamond_pickaxe": {
+      "texture": "cache/restricted/diamond_pickaxe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Pickaxe_JE3_BE3.png?40f8b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石镐",
+      "en_name": "Diamond Pickaxe"
+    },
+    "wooden_axe": {
+      "texture": "cache/restricted/wooden_axe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Axe_JE2_BE2.png?5e2c6",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木斧",
+      "en_name": "Wooden Axe"
+    },
+    "stone_axe": {
+      "texture": "cache/restricted/stone_axe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Axe_JE2_BE2.png?9c7ef",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石斧",
+      "en_name": "Stone Axe"
+    },
+    "iron_axe": {
+      "texture": "cache/restricted/iron_axe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Axe_JE5_BE2.png?8eaa4",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁斧",
+      "en_name": "Iron Axe"
+    },
+    "gold_axe": {
+      "texture": "cache/restricted/gold_axe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Golden_Axe_JE3_BE2.png?ed1c7",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金斧",
+      "en_name": "Golden Axe"
+    },
+    "diamond_axe": {
+      "texture": "cache/restricted/diamond_axe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Axe_JE3_BE3.png?a746d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石斧",
+      "en_name": "Diamond Axe"
+    },
+    "wooden_shovel": {
+      "texture": "cache/restricted/wooden_shovel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Shovel_JE2_BE2.png?a78a2",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木铲",
+      "en_name": "Wooden Shovel"
+    },
+    "stone_shovel": {
+      "texture": "cache/restricted/stone_shovel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Shovel_JE2_BE2.png?716b9",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石铲",
+      "en_name": "Stone Shovel"
+    },
+    "iron_shovel": {
+      "texture": "cache/restricted/iron_shovel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Shovel_JE3_BE2.png?fadf7",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁铲",
+      "en_name": "Iron Shovel"
+    },
+    "gold_shovel": {
+      "texture": "cache/restricted/gold_shovel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Golden_Shovel_JE3_BE2.png?e3b17",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金铲",
+      "en_name": "Golden Shovel"
+    },
+    "diamond_shovel": {
+      "texture": "cache/restricted/diamond_shovel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Shovel_JE3_BE3.png?18d39",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石铲",
+      "en_name": "Diamond Shovel"
+    },
+    "wooden_sword": {
+      "texture": "cache/restricted/wooden_sword.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Sword_JE2_BE2.png?b526d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木剑",
+      "en_name": "Wooden Sword"
+    },
+    "stone_sword": {
+      "texture": "cache/restricted/stone_sword.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Sword_JE2_BE2.png?0287a",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石剑",
+      "en_name": "Stone Sword"
+    },
+    "iron_sword": {
+      "texture": "cache/restricted/iron_sword.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Sword_JE2_BE2.png?6a66b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁剑",
+      "en_name": "Iron Sword"
+    },
+    "gold_sword": {
+      "texture": "cache/restricted/gold_sword.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Golden_Sword_JE3_BE2.png?0fcc4",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金剑",
+      "en_name": "Golden Sword"
+    },
+    "diamond_sword": {
+      "texture": "cache/restricted/diamond_sword.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Sword_JE3_BE3.png?7b46e",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石剑",
+      "en_name": "Diamond Sword"
+    },
+    "wooden_hoe": {
+      "texture": "cache/restricted/wooden_hoe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Hoe_JE3_BE3.png?fce53",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "木锄",
+      "en_name": "Wooden Hoe"
+    },
+    "stone_hoe": {
+      "texture": "cache/restricted/stone_hoe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Stone_Hoe_JE3_BE2.png?964d1",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "石锄",
+      "en_name": "Stone Hoe"
+    },
+    "iron_hoe": {
+      "texture": "cache/restricted/iron_hoe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Hoe_JE2_BE2.png?20976",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁锄",
+      "en_name": "Iron Hoe"
+    },
+    "gold_hoe": {
+      "texture": "cache/restricted/gold_hoe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Golden_Hoe_JE3_BE3.png?73fb2",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "金锄",
+      "en_name": "Golden Hoe"
+    },
+    "diamond_hoe": {
+      "texture": "cache/restricted/diamond_hoe.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Hoe_JE3_BE3.png?ed241",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "钻石锄",
+      "en_name": "Diamond Hoe"
+    },
+    "wheat": {
+      "texture": "cache/restricted/wheat.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Wheat_JE2_BE2.png?0eb25",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "小麦",
+      "en_name": "Wheat"
+    },
+    "apple": {
+      "texture": "cache/restricted/apple.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Apple_JE3_BE3.png?cc008",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "苹果",
+      "en_name": "Apple"
+    },
+    "bread": {
+      "texture": "cache/restricted/bread.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Bread_JE3_BE3.png?f220b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "面包",
+      "en_name": "Bread"
+    },
+    "raw_beef": {
+      "texture": "cache/restricted/raw_beef.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Raw_Beef_JE3_BE3.png?55e2e",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "生牛肉",
+      "en_name": "Raw Beef"
+    },
+    "cooked_beef": {
+      "texture": "cache/restricted/cooked_beef.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Steak_JE3_BE3.png?0d524",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "熟牛排",
+      "en_name": "Steak"
+    },
+    "leather": {
+      "texture": "cache/restricted/leather.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Leather_JE2_BE2.png?f5373",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "皮革",
+      "en_name": "Leather"
+    },
+    "leather_helmet": {
+      "texture": "cache/restricted/leather_helmet.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Leather_Cap_JE4_BE2.png?478b4",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "皮革头盔",
+      "en_name": "Leather Cap"
+    },
+    "leather_chestplate": {
+      "texture": "cache/restricted/leather_chestplate.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Leather_Tunic_JE4_BE2.png?e16aa",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "皮革胸甲",
+      "en_name": "Leather Tunic"
+    },
+    "leather_leggings": {
+      "texture": "cache/restricted/leather_leggings.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Leather_Pants_JE4_BE2.png?bd496",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "皮革护腿",
+      "en_name": "Leather Pants"
+    },
+    "leather_boots": {
+      "texture": "cache/restricted/leather_boots.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Leather_Boots_JE3_BE2.png?be9db",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "皮革靴子",
+      "en_name": "Leather Boots"
+    },
+    "iron_helmet": {
+      "texture": "cache/restricted/iron_helmet.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Helmet_JE2_BE2.png?bfba3",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁头盔",
+      "en_name": "Iron Helmet"
+    },
+    "iron_chestplate": {
+      "texture": "cache/restricted/iron_chestplate.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Chestplate_JE2_BE2.png?61f89",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁胸甲",
+      "en_name": "Iron Chestplate"
+    },
+    "iron_leggings": {
+      "texture": "cache/restricted/iron_leggings.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Leggings_JE2_BE2.png?7dffe",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁护腿",
+      "en_name": "Iron Leggings"
+    },
+    "iron_boots": {
+      "texture": "cache/restricted/iron_boots.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Iron_Boots_JE2_BE2.png?01f59",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "铁靴子",
+      "en_name": "Iron Boots"
+    },
+    "lapis_lazuli": {
+      "texture": "cache/restricted/lapis_lazuli.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Lapis_Lazuli_JE2_BE2.png?d36c7",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "青金石",
+      "en_name": "Lapis Lazuli"
+    },
+    "sugar_cane": {
+      "texture": "cache/restricted/sugar_cane.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Sugar_Cane_JE2_BE2.png?2d23b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "甘蔗",
+      "en_name": "Sugar Cane"
+    },
+    "paper": {
+      "texture": "cache/restricted/paper.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Paper_JE2_BE2.png?88891",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "纸",
+      "en_name": "Paper"
+    },
+    "book": {
+      "texture": "cache/restricted/book.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Book_JE2_BE2.png?8310b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "书",
+      "en_name": "Book"
+    },
+    "blaze_rod": {
+      "texture": "cache/restricted/blaze_rod.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Blaze_Rod_JE1_BE1.png?d06fc",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "烈焰棒",
+      "en_name": "Blaze Rod"
+    },
+    "blaze_powder": {
+      "texture": "cache/restricted/blaze_powder.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Blaze_Powder_JE2_BE1.png?a5171",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "烈焰粉",
+      "en_name": "Blaze Powder"
+    },
+    "nether_wart": {
+      "texture": "cache/restricted/nether_wart.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Nether_Wart_Age_3_JE6_BE2.png?2ee0b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "下界疣",
+      "en_name": "Nether Wart"
+    },
+    "sugar": {
+      "texture": "cache/restricted/sugar.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Sugar_JE2_BE2.png?e8770",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "糖",
+      "en_name": "Sugar"
+    },
+    "spider_eye": {
+      "texture": "cache/restricted/spider_eye.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Spider_Eye_JE2_BE2.png?45798",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "蜘蛛眼",
+      "en_name": "Spider Eye"
+    },
+    "glistering_melon": {
+      "texture": "cache/restricted/glistering_melon.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Glistering_Melon_Slice_JE2_BE2.png?42c6e",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "闪烁的西瓜",
+      "en_name": "Glistering Melon Slice"
+    },
+    "glass_bottle": {
+      "texture": "cache/restricted/glass_bottle.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Glass_Bottle_JE2_BE2.png?03581",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "玻璃瓶",
+      "en_name": "Glass Bottle"
+    },
+    "water_bottle": {
+      "texture": "cache/restricted/water_bottle.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Water_Bottle_JE2_BE3.png?63599",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "水瓶",
+      "en_name": "Water Bottle"
+    },
+    "awkward_potion": {
+      "texture": "cache/restricted/awkward_potion.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Invicon_Awkward_Potion.png?46cb6",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "粗制药水",
+      "en_name": "Awkward Potion"
+    },
+    "potion_healing": {
+      "texture": "cache/restricted/potion_healing.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Healing_JE2_BE3.png?75039",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "治疗药水",
+      "en_name": "Potion of Healing"
+    },
+    "potion_swiftness": {
+      "texture": "cache/restricted/potion_swiftness.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Swiftness_JE3_BE3.png?f79ff",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "迅捷药水",
+      "en_name": "Potion of Swiftness"
+    },
+    "potion_poison": {
+      "texture": "cache/restricted/potion_poison.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Poison_JE3_BE3.png?b914a",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "剧毒药水",
+      "en_name": "Potion of Poison"
+    },
+    "cobblestone": {
+      "texture": "cache/restricted/cobblestone.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Cobblestone_JE7_BE3.png?a83c5",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "圆石",
+      "en_name": "Cobblestone"
+    },
+    "gravel": {
+      "texture": "cache/restricted/gravel.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Gravel_JE5_BE4.png?a6d50",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "沙砾",
+      "en_name": "Gravel"
+    },
+    "clay": {
+      "texture": "cache/restricted/clay.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Clay_JE2_BE2.png?7f8a4",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "黏土块",
+      "en_name": "Clay"
+    },
+    "ice": {
+      "texture": "cache/restricted/ice.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Ice_JE6_BE6.png?0339d",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "冰",
+      "en_name": "Ice"
+    },
+    "snow_block": {
+      "texture": "cache/restricted/snow_block.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Snow_Block_JE2_BE2.png?a2537",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "雪块",
+      "en_name": "Snow Block"
+    },
+    "bedrock": {
+      "texture": "cache/restricted/bedrock.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Bedrock_JE2_BE2.png?13f82",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "基岩",
+      "en_name": "Bedrock"
+    },
+    "lava": {
+      "texture": "cache/restricted/lava.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Lava_JE19.png?1c56f",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "熔岩",
+      "en_name": "Lava"
+    },
+    "netherrack": {
+      "texture": "cache/restricted/netherrack.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Netherrack_JE4_BE2.png?e5f97",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "下界岩",
+      "en_name": "Netherrack"
+    },
+    "glowstone": {
+      "texture": "cache/restricted/glowstone.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Glowstone_JE4.png?cb615",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "荧石",
+      "en_name": "Glowstone"
+    },
+    "nether_portal": {
+      "texture": "cache/restricted/nether_portal.gif",
+      "icon_url": "https://zh.minecraft.wiki/images/Nether_Portal_JE.gif?409dd",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "下界传送门",
+      "en_name": "Nether Portal"
+    },
+    "end_stone": {
+      "texture": "cache/restricted/end_stone.png",
+      "icon_url": "https://zh.minecraft.wiki/images/End_Stone_JE3_BE2.png?5449b",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "末地石",
+      "en_name": "End Stone"
+    },
+    "chorus_fruit": {
+      "texture": "cache/restricted/chorus_fruit.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Chorus_Fruit_JE2_BE2.png?46d4f",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "紫颂果",
+      "en_name": "Chorus Fruit"
+    },
+    "ender_pearl": {
+      "texture": "cache/restricted/ender_pearl.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Ender_Pearl_JE2_BE2.png?7d893",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "末影珍珠",
+      "en_name": "Ender Pearl"
+    },
+    "bucket": {
+      "texture": "cache/restricted/bucket.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Bucket_JE2_BE2.png?68540",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "桶",
+      "en_name": "Bucket"
+    },
+    "chest": {
+      "texture": "cache/restricted/chest.png",
+      "icon_url": "https://zh.minecraft.wiki/images/Chest_%28S%29_JE2_BE3.png?f32b6",
+      "license": "restricted-mojang-via-wiki",
+      "bucket": "restricted",
+      "zh_name": "箱子",
+      "en_name": "Chest"
+    }
+  }
+}
