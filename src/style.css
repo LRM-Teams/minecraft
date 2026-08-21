@@ -7,6 +7,22 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 #hud.station-active { z-index: 5; }
 #brand { position: absolute; top: 20px; left: 24px; font-weight: 900; font-size: 17px; letter-spacing: 2px; }
 #brand span { color: #f5d56f; }
+#fps {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #e8fff4;
+  background: rgba(8, 14, 16, .55);
+  border: 1px solid #5a6e72;
+  padding: 4px 8px;
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 #seed { position: absolute; top: 45px; left: 24px; color: #e9f1d3; font-size: 11px; opacity: .85; }
 #world-time { position: absolute; top: 64px; left: 24px; color: #fff2b5; font-size: 11px; opacity: .9; }
 #health { position: absolute; top: 83px; left: 24px; color: #ff7770; font-size: 13px; letter-spacing: 1px; }
@@ -133,7 +149,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
   .station-body, .furnace-body { grid-template-columns: 1fr; }
   .station-panel { inset: 6% 3%; }
 }
-#codex { position: absolute; top: 20px; right: 24px; width: min(280px, calc(100vw - 48px)); padding: 15px; border: 2px solid #7e9ca1; background: rgba(11, 20, 24, .88); color: #dcecf0; font-size: 11px; line-height: 1.55; box-shadow: 5px 5px 0 rgba(0,0,0,.2); transition: opacity .15s; }
+#codex { position: absolute; top: 52px; right: 24px; width: min(280px, calc(100vw - 48px)); padding: 15px; border: 2px solid #7e9ca1; background: rgba(11, 20, 24, .88); color: #dcecf0; font-size: 11px; line-height: 1.55; box-shadow: 5px 5px 0 rgba(0,0,0,.2); transition: opacity .15s; }
 #codex.hidden { opacity: 0; visibility: hidden; }
 .codex-title { color: #f1dda3; font-size: 14px; font-weight: 800; letter-spacing: 1px; }.codex-title small { float: right; color: #a9b7ba; font-size: 9px; font-weight: 400; }.recipe { margin: 6px 0; padding: 5px; background: rgba(150, 201, 210, .1); }.recipe span { color: #f1dda3; padding: 0 5px; }.recipe kbd { border: 1px solid #c7d7d6; padding: 1px 4px; color: white; }.codex-note { margin-bottom: 0; color: #afc0bd; }
 #start-screen { position: fixed; inset: 0; z-index: 2; display: grid; place-items: center; background: linear-gradient(rgba(34,74,100,.4), rgba(7,14,20,.65)); transition: opacity .2s; }
@@ -150,4 +166,4 @@ button.link { margin-top: 14px; border-color: #66766c; padding: 8px; background:
 .room-fields input { min-width: 0; border: 1px solid #6b969f; padding: 8px; background: #16272d; color: #fff; font: inherit; font-size: 11px; }
 .room-button { margin-top: 7px; padding: 8px; border-color: #8ac4d8; background: #39778c; box-shadow: none; font-size: 11px; }
 #room-status { display: block; margin-top: 7px; color: #a9c8d1; font-size: 9px; }
-@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #hunger { left: 12px; top: 90px; } #armor { left: 12px; top: 108px; } #audio-state { left: 12px; top: 128px; } #network-state { left: 12px; top: 144px; } #village-state { left: 12px; top: 160px; } #guardian-state { left: 12px; top: 176px; } #raid-state { left: 12px; top: 192px; } #biome-state { left: 12px; top: 208px; } #dimension-state { left: 12px; top: 224px; } #wither-state { left: 12px; top: 238px; } #wither-star { left: 12px; top: 268px; } #codex { top: 156px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }
+@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #fps { top: 12px; right: 12px; font-size: 12px; min-width: 64px; padding: 3px 6px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #hunger { left: 12px; top: 90px; } #armor { left: 12px; top: 108px; } #audio-state { left: 12px; top: 128px; } #network-state { left: 12px; top: 144px; } #village-state { left: 12px; top: 160px; } #guardian-state { left: 12px; top: 176px; } #raid-state { left: 12px; top: 192px; } #biome-state { left: 12px; top: 208px; } #dimension-state { left: 12px; top: 224px; } #wither-state { left: 12px; top: 238px; } #wither-star { left: 12px; top: 268px; } #codex { top: 48px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }

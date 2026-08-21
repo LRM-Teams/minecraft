@@ -211,6 +211,7 @@ app.innerHTML = `
     <div id="dimension-state"></div>
     <div id="wither-state"></div>
     <div id="wither-star"></div>
+    <div id="fps" aria-live="polite">— FPS</div>
     <div id="crosshair">+</div>
     <div id="held-icon" aria-hidden="true"></div>
     <div id="hint">点击进入 · 洞窟挖矿→熔炉烧锭→装备/火把 · WASD · 空格跳 · Shift冲刺 · Ctrl潜行 · 左键挖 · 右键放 · E背包 · G图鉴</div>
@@ -1502,6 +1503,7 @@ scene.add(crackOverlay.mesh);
 const startScreen = document.querySelector<HTMLDivElement>("#start-screen")!;
 const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
 const status = document.querySelector<HTMLDivElement>("#status")!;
+const fpsHud = document.querySelector<HTMLDivElement>("#fps")!;
 const heldIcon = document.querySelector<HTMLDivElement>("#held-icon")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
@@ -1930,6 +1932,9 @@ const keys = new Set<string>();
 let verticalVelocity = 0;
 let grounded = false;
 let lastTime = performance.now();
+let fpsFrames = 0;
+let fpsWindowStart = lastTime;
+let fpsDisplay = 0;
 let dirty = false;
 let room: MultiplayerRoom | undefined;
 let awaitingRoomSnapshot = false;
@@ -3428,6 +3433,14 @@ const frame = (now: number): void => {
   if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
   if (tickAllBrewingStands(stations, delta) && stations.brewOpen) refreshStationsUi();
   if (!rendererLost) renderer.render(scene, camera);
+  fpsFrames += 1;
+  const elapsed = now - fpsWindowStart;
+  if (elapsed >= 500) {
+    fpsDisplay = Math.round((fpsFrames * 1000) / elapsed);
+    fpsHud.textContent = `${fpsDisplay} FPS`;
+    fpsFrames = 0;
+    fpsWindowStart = now;
+  }
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);
