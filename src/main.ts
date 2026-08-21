@@ -164,6 +164,7 @@ import {
   type EndBlockId,
 } from "./end";
 import { createEnderDragon, hitEnderDragon, updateEnderDragon } from "./enderDragon";
+import { createCrackOverlay, createViewmodel } from "./viewmodel";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -240,6 +241,9 @@ const fog = new THREE.Fog("#8fc8e8", 28, 86);
 scene.fog = fog;
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
+const viewmodel = createViewmodel();
+camera.add(viewmodel.root);
+const crackOverlay = createCrackOverlay();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -1395,6 +1399,8 @@ const selection = new THREE.LineSegments(
 selection.visible = false;
 selection.renderOrder = 10;
 scene.add(selection);
+scene.add(camera);
+scene.add(crackOverlay.mesh);
 
 const startScreen = document.querySelector<HTMLDivElement>("#start-screen")!;
 const hotbar = document.querySelector<HTMLDivElement>("#hotbar")!;
@@ -1608,6 +1614,12 @@ const renderHotbar = (): void => {
     ? `<img src="${heldSrc}" alt="${iconLabel(type!, ITEM_LABELS[type!] ?? type!)}" draggable="false" />`
     : "";
   heldIcon.classList.toggle("empty", !heldSrc);
+  const block = heldBlock();
+  viewmodel.setHeld(
+    stack?.item ?? null,
+    stations.equippedTool,
+    block ? colors[block] : 0x888888,
+  );
 };
 renderHotbar();
 
@@ -2115,6 +2127,7 @@ const stopMining = (): void => {
   mineHeld = false;
   miningKey = undefined;
   miningProgress = 0;
+  crackOverlay.set(0, null);
 };
 
 const updateMining = (delta: number): void => {
@@ -2131,6 +2144,7 @@ const updateMining = (delta: number): void => {
     }
     const duration = block === "end_crystal" ? 0.55 : 0.9;
     miningProgress = Math.min(1, miningProgress + delta / duration);
+    crackOverlay.set(miningProgress, target.position);
     status.textContent = `挖掘 ${block} · ${Math.round(miningProgress * 100)}%`;
     if (miningProgress >= 1) {
       edit(false);
@@ -2146,6 +2160,7 @@ const updateMining = (delta: number): void => {
   }
   const mineDuration = breakDuration(block, stations.equippedTool) / (isPickaxe(stations.equippedTool ?? undefined) ? efficiencyMultiplier(equippedEnchantments()) : 1);
   miningProgress = Math.min(1, miningProgress + delta / mineDuration);
+  crackOverlay.set(miningProgress, target.position);
   status.textContent = `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`;
   if (miningProgress >= 1) {
     edit(false);
@@ -3188,6 +3203,8 @@ const frame = (now: number): void => {
   }
   findTarget();
   updateMining(delta);
+  viewmodel.tick(delta, mineHeld);
+  viewmodel.root.visible = document.pointerLockElement === renderer.domElement && !anyStationOpen();
   if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
   if (tickAllBrewingStands(stations, delta) && stations.brewOpen) refreshStationsUi();
   if (!rendererLost) renderer.render(scene, camera);
