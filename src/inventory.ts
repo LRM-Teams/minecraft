@@ -1,11 +1,11 @@
-import { BLOCK_TYPES, type BlockType } from "./world";
+import { ITEM_TYPES, type ItemType } from "./items";
 
-export type Inventory = Record<BlockType, number>;
+export type Inventory = Record<ItemType, number>;
 
 export const createInventory = (saved?: Partial<Inventory>): Inventory =>
-  Object.fromEntries(BLOCK_TYPES.map((type) => [type, saved?.[type] ?? 0])) as Inventory;
+  Object.fromEntries(ITEM_TYPES.map((type) => [type, saved?.[type] ?? 0])) as Inventory;
 
-/** The first compact crafting recipe: one collected log turns into four building planks. */
+/** Quick-craft: log → planks (same as shapeless recipe). */
 export const craftPlanks = (inventory: Inventory): boolean => {
   if (inventory.wood < 1) return false;
   inventory.wood -= 1;
@@ -13,7 +13,7 @@ export const craftPlanks = (inventory: Inventory): boolean => {
   return true;
 };
 
-/** Four mined stone blocks become four durable building bricks. */
+/** Quick-craft: 4 stone → 4 stone bricks. */
 export const craftBricks = (inventory: Inventory): boolean => {
   if (inventory.stone < 4) return false;
   inventory.stone -= 4;
@@ -21,10 +21,8 @@ export const craftBricks = (inventory: Inventory): boolean => {
   return true;
 };
 
-/** Four sand blocks become four translucent glass building blocks. */
-export const craftGlass = (inventory: Inventory): boolean => {
-  if (inventory.sand < 4) return false;
-  inventory.sand -= 4;
-  inventory.glass += 4;
-  return true;
-};
+/**
+ * Glass is vanilla furnace-only. Hotkey kept as a hint stub so old keybinds
+ * do not silently invent glass without smelting.
+ */
+export const craftGlass = (_inventory: Inventory): boolean => false;

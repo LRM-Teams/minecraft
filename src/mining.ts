@@ -1,4 +1,5 @@
 import type { BlockType } from "./world";
+import { isAxe, isPickaxe, isShovel, type ExtraItem, TOOL_SPEED } from "./items";
 
 const DURATIONS: Record<BlockType, number> = {
   grass: 0.3,
@@ -16,7 +17,33 @@ const DURATIONS: Record<BlockType, number> = {
   iron_ore: 1.5,
   gold_ore: 1.8,
   diamond_ore: 2.2,
+  crafting_table: 0.65,
+  furnace: 0.95,
 };
 
-export const breakDuration = (block: BlockType): number => DURATIONS[block];
-export const isMineable = (block: BlockType): boolean => Number.isFinite(breakDuration(block));
+const PICKAXE_BLOCKS = new Set<BlockType>([
+  "stone",
+  "bricks",
+  "coal_ore",
+  "copper_ore",
+  "iron_ore",
+  "gold_ore",
+  "diamond_ore",
+  "furnace",
+]);
+const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "leaves"]);
+const SHOVEL_BLOCKS = new Set<BlockType>(["grass", "dirt", "sand"]);
+
+export const breakDuration = (block: BlockType, tool?: ExtraItem | null): number => {
+  const base = DURATIONS[block];
+  if (!Number.isFinite(base)) return base;
+  if (!tool) return base;
+  const speed = TOOL_SPEED[tool] ?? 1;
+  const suited =
+    (isPickaxe(tool) && PICKAXE_BLOCKS.has(block)) ||
+    (isAxe(tool) && AXE_BLOCKS.has(block)) ||
+    (isShovel(tool) && SHOVEL_BLOCKS.has(block));
+  return suited ? base / speed : base;
+};
+
+export const isMineable = (block: BlockType): boolean => Number.isFinite(DURATIONS[block]);
