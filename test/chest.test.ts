@@ -68,4 +68,11 @@ describe("LRM-1601 chest", () => {
     expect(drops).toEqual([{ item: "iron_ingot", count: 4 }]);
     expect(map.has("4,5,6")).toBe(false);
   });
+
+  it("mines faster with an axe (wiki wood-family)", async () => {
+    const { breakDuration } = await import("../src/mining");
+    const bare = breakDuration("chest", null);
+    const axe = breakDuration("chest", "wooden_axe");
+    expect(axe).toBeLessThan(bare);
+  });
 });

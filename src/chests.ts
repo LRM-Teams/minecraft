@@ -1,5 +1,4 @@
 import {
-  clickInvSlot,
   MAIN_INV_SIZE,
   STACK_MAX,
   isItemType,

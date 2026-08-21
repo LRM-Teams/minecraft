@@ -53,7 +53,7 @@ const PICKAXE_BLOCKS = new Set<BlockType>([
   "brewing_stand",
   "redstone_lamp",
 ]);
-const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "bookshelf", "leaves", "bed", "oak_door", "ladder"]);
+const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "chest", "bookshelf", "leaves", "bed", "oak_door", "ladder"]);
 const SHOVEL_BLOCKS = new Set<BlockType>(["grass", "dirt", "sand"]);
 
 export const breakDuration = (block: BlockType, tool?: ExtraItem | null): number => {
