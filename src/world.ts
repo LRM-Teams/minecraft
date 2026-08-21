@@ -1,6 +1,6 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed", "redstone_dust", "lever", "redstone_torch", "redstone_lamp", "oak_door", "ladder"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed", "redstone_dust", "lever", "redstone_torch", "redstone_lamp", "oak_door", "ladder", "chest"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 /** Blocks that do not occlude neighbours or block movement (torch / dust / lever / ladder fixtures). */

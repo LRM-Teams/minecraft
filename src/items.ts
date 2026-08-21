@@ -150,6 +150,7 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   diamond_ore: "钻石矿石",
   crafting_table: "工作台",
   furnace: "熔炉",
+  chest: "箱子",
   enchanting_table: "附魔台",
   bookshelf: "书架",
   brewing_stand: "酿造台",

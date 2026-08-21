@@ -109,6 +109,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .player-inv h4 { margin: 0 0 6px; color: #f1dda3; font-size: 12px; }
 .inv-grid { display: grid; gap: 3px; margin-bottom: 8px; }
 .inv-grid.main { grid-template-columns: repeat(9, 36px); }
+.chest-grid { margin-bottom: 12px; }
 .inv-grid.hotbar { grid-template-columns: repeat(9, 36px); padding-top: 4px; border-top: 1px solid #3a4548; }
 .inv-cell { position: relative; width: 36px; height: 36px; padding: 2px; border: 1px solid #7e9ca1; background: #1a2428; color: #edf7ff; cursor: pointer; display: grid; place-items: center; box-shadow: none; font: inherit; }
 .inv-cell.empty { background: #141c20; }

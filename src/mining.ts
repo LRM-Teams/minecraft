@@ -22,6 +22,7 @@ const DURATIONS: Record<BlockType, number> = {
   obsidian: 8,
   crafting_table: 0.65,
   furnace: 0.95,
+  chest: 0.7,
   enchanting_table: 1.2,
   bookshelf: 0.55,
   brewing_stand: 0.7,
