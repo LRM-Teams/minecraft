@@ -9,7 +9,7 @@ export const CHUNK_SIZE = 16;
 /** Soft vertical build limit (inclusive). */
 export const MAX_BUILD_Y = 24;
 /** Default chunk radius streamed around the player for infinite exploration. */
-export const STREAM_CHUNK_RADIUS = 3;
+export const STREAM_CHUNK_RADIUS = 2;
 
 export type BlockPosition = { x: number; y: number; z: number };
 /** Stable building anchors for the later villager simulation. */

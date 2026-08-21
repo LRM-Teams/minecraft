@@ -65,7 +65,8 @@ import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
-import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { PERF } from "./perf";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { BOX_FACES, type BlockFace } from "./blockFaces";
 import { beginBlockFaceAssets, blockFaceTexture } from "./blockAssets";
@@ -271,10 +272,10 @@ const viewmodel = createViewmodel();
 camera.add(viewmodel.root);
 const crackOverlay = createCrackOverlay();
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, PERF.maxPixelRatio));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = PERF.shadowMap;
+renderer.shadowMap.type = THREE.BasicShadowMap;
 app.prepend(renderer.domElement);
 
 // --- WebGL context-loss resilience: recover a black/blank scene after the GPU
@@ -297,12 +298,14 @@ renderer.domElement.addEventListener("webglcontextrestored", () => {
 
 const sun = new THREE.DirectionalLight("#fff2c5", 2.8);
 sun.position.set(-20, 32, 14);
-sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -35;
-sun.shadow.camera.right = 35;
-sun.shadow.camera.top = 35;
-sun.shadow.camera.bottom = -35;
+sun.castShadow = PERF.sunCastShadow;
+if (PERF.sunCastShadow) {
+  sun.shadow.mapSize.set(512, 512);
+  sun.shadow.camera.left = -28;
+  sun.shadow.camera.right = 28;
+  sun.shadow.camera.top = 28;
+  sun.shadow.camera.bottom = -28;
+}
 scene.add(sun);
 const skyColor = new THREE.Color();
 const daylight = new THREE.HemisphereLight("#d8efff", "#4a5e35", 2.2);
@@ -610,20 +613,108 @@ const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Ma
 
 type BlockMeshBucket = { type: BlockType; tint: THREE.Color; positions: BlockPosition[] };
 
+const disposeMesh = (mesh: THREE.InstancedMesh): void => {
+  scene.remove(mesh);
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  materials.forEach((material) => material.dispose());
+};
+
+const applyBlockInstanceMatrix = (
+  type: BlockType,
+  key: string,
+  position: BlockPosition,
+  index: number,
+  mesh: THREE.InstancedMesh,
+): void => {
+  if (type === "torch" || type === "redstone_torch") {
+    matrix.compose(
+      new THREE.Vector3(position.x, position.y - 0.12, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(0.22, 0.72, 0.22),
+    );
+  } else if (type === "redstone_dust") {
+    matrix.compose(
+      new THREE.Vector3(position.x, position.y - 0.42, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(0.92, 0.08, 0.92),
+    );
+  } else if (type === "lever") {
+    matrix.compose(
+      new THREE.Vector3(position.x, position.y - 0.15, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(0.35, 0.7, 0.35),
+    );
+  } else if (type === "bed") {
+    matrix.compose(
+      new THREE.Vector3(position.x, position.y - 0.2, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(1, 0.55, 1),
+    );
+  } else if (type === "oak_door") {
+    const open = key.endsWith(":open");
+    matrix.compose(
+      new THREE.Vector3(position.x + (open ? 0.35 : 0), position.y, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(open ? 0.18 : 0.85, 1, 1),
+    );
+  } else if (type === "ladder") {
+    matrix.compose(
+      new THREE.Vector3(position.x, position.y, position.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(0.92, 1, 0.12),
+    );
+  } else {
+    matrix.makeTranslation(position.x, position.y, position.z);
+  }
+  mesh.setMatrixAt(index, matrix);
+};
+
+const applyBucketMaterialWash = (mesh: THREE.InstancedMesh, type: BlockType, key: string): void => {
+  if (type === "redstone_lamp") {
+    const lit = key.endsWith(":lit");
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((mat) => {
+      if (mat instanceof THREE.MeshLambertMaterial) {
+        mat.color.setHex(lit ? 0xffe08a : colors.redstone_lamp);
+        mat.emissive = new THREE.Color(lit ? 0xffaa44 : 0x000000);
+        mat.emissiveIntensity = lit ? 0.65 : 0;
+      }
+    });
+  }
+  if (type === "redstone_dust") {
+    const band = Number(key.split(":")[1] ?? 0);
+    const t = band / 3;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((mat) => {
+      if (mat instanceof THREE.MeshLambertMaterial) {
+        mat.color.setRGB(0.35 + 0.55 * t, 0.05 + 0.05 * t, 0.05);
+      }
+    });
+  }
+  if (type === "redstone_torch") {
+    const on = key.endsWith(":on");
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((mat) => {
+      if (mat instanceof THREE.MeshLambertMaterial) {
+        mat.color.setHex(on ? 0xff4040 : 0x4a2020);
+        mat.emissive = new THREE.Color(on ? 0xff2020 : 0x000000);
+        mat.emissiveIntensity = on ? 0.45 : 0;
+      }
+    });
+  }
+};
+
 class BlockRenderer {
   /** Keyed by `type` or `type:variant` so biome wash can use material.color safely. */
   private meshes = new Map<string, THREE.InstancedMesh>();
 
+  /**
+   * Incremental rebuild: only dispose buckets that disappeared or changed count.
+   * Avoids full-scene InstancedMesh teardown on every chunk step (LRM-1613).
+   */
   rebuild(world: VoxelWorld, centerX: number, centerZ: number): void {
-    this.meshes.forEach((mesh) => {
-      scene.remove(mesh);
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      materials.forEach((material) => material.dispose());
-    });
-    this.meshes.clear();
-
     const buckets = new Map<string, BlockMeshBucket>();
-    world.visibleBlocks(centerX, centerZ, 2).forEach(({ type, position }) => {
+    world.visibleBlocks(centerX, centerZ, PERF.visibleChunkRadius).forEach(({ type, position }) => {
       let key: string = type;
       let tint = ONE_WHITE;
       if (BIOME_TINTABLE.has(type)) {
@@ -648,94 +739,33 @@ class BlockRenderer {
       bucket.positions.push(position);
     });
 
+    for (const [key, mesh] of [...this.meshes.entries()]) {
+      const bucket = buckets.get(key);
+      if (!bucket || bucket.positions.length !== mesh.count) {
+        disposeMesh(mesh);
+        this.meshes.delete(key);
+      }
+    }
+
     buckets.forEach((bucket, key) => {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
-      const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
-      mesh.castShadow = type !== "leaves" && type !== "torch" && type !== "redstone_dust" && type !== "lever" && type !== "redstone_torch" && type !== "ladder";
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
+      let mesh = this.meshes.get(key);
+      if (!mesh) {
+        mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        mesh.frustumCulled = true;
+        this.meshes.set(key, mesh);
+        scene.add(mesh);
+      }
       positions.forEach((position, index) => {
-        if (type === "torch" || type === "redstone_torch") {
-          matrix.compose(
-            new THREE.Vector3(position.x, position.y - 0.12, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(0.22, 0.72, 0.22),
-          );
-        } else if (type === "redstone_dust") {
-          matrix.compose(
-            new THREE.Vector3(position.x, position.y - 0.42, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(0.92, 0.08, 0.92),
-          );
-        } else if (type === "lever") {
-          matrix.compose(
-            new THREE.Vector3(position.x, position.y - 0.15, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(0.35, 0.7, 0.35),
-          );
-        } else if (type === "bed") {
-          matrix.compose(
-            new THREE.Vector3(position.x, position.y - 0.2, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(1, 0.55, 1),
-          );
-        } else if (type === "oak_door") {
-          const open = key.endsWith(":open");
-          matrix.compose(
-            new THREE.Vector3(position.x + (open ? 0.35 : 0), position.y, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(open ? 0.18 : 0.85, 1, 1),
-          );
-        } else if (type === "ladder") {
-          matrix.compose(
-            new THREE.Vector3(position.x, position.y, position.z),
-            new THREE.Quaternion(),
-            new THREE.Vector3(0.92, 1, 0.12),
-          );
-        } else {
-          matrix.makeTranslation(position.x, position.y, position.z);
-        }
-        mesh.setMatrixAt(index, matrix);
+        applyBlockInstanceMatrix(type, key, position, index, mesh!);
       });
-      // Lit lamps / torch on-off / dust power: wash material from bucket key.
-      if (type === "redstone_lamp") {
-        const lit = key.endsWith(":lit");
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if (mat instanceof THREE.MeshLambertMaterial) {
-            mat.color.setHex(lit ? 0xffe08a : colors.redstone_lamp);
-            mat.emissive = new THREE.Color(lit ? 0xffaa44 : 0x000000);
-            mat.emissiveIntensity = lit ? 0.65 : 0;
-          }
-        });
-      }
-      if (type === "redstone_dust") {
-        const band = Number(key.split(":")[1] ?? 0);
-        const t = band / 3;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if (mat instanceof THREE.MeshLambertMaterial) {
-            mat.color.setRGB(0.35 + 0.55 * t, 0.05 + 0.05 * t, 0.05);
-          }
-        });
-      }
-      if (type === "redstone_torch") {
-        const on = key.endsWith(":on");
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((mat) => {
-          if (mat instanceof THREE.MeshLambertMaterial) {
-            mat.color.setHex(on ? 0xff4040 : 0x4a2020);
-            mat.emissive = new THREE.Color(on ? 0xff2020 : 0x000000);
-            mat.emissiveIntensity = on ? 0.45 : 0;
-          }
-        });
-      }
+      applyBucketMaterialWash(mesh, type, key);
       mesh.instanceMatrix.needsUpdate = true;
       mesh.userData.positions = positions;
       mesh.userData.blockType = type;
-      this.meshes.set(key, mesh);
-      scene.add(mesh);
     });
   }
 
@@ -831,9 +861,9 @@ class NetherRenderer {
       const positions = this.positions.get(type) ?? [];
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, netherMaterialFor(type), positions.length);
-      mesh.castShadow = type !== "nether_portal" && type !== "lava";
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = true;
       positions.forEach((position, index) => {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
@@ -935,9 +965,9 @@ class EndRenderer {
       const positions = this.positions.get(type) ?? [];
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, endMaterialFor(type), positions.length);
-      mesh.castShadow = type !== "end_portal" && type !== "end_crystal";
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = true;
       positions.forEach((position, index) => {
         matrix.makeTranslation(position.x, position.y, position.z);
         mesh.setMatrixAt(index, matrix);
@@ -1008,16 +1038,20 @@ const respawnPoint = (): [number, number, number] => {
   return [0, currentTopY(0, 0) + PLAYER_EYE, dimension === "nether" ? 4 : 8];
 };
 
-const MAX_TORCH_LIGHTS = 14;
+const MAX_TORCH_LIGHTS = PERF.maxTorchLights;
 const torchLights: THREE.PointLight[] = [];
 for (let i = 0; i < MAX_TORCH_LIGHTS; i += 1) {
   const light = new THREE.PointLight(TORCH_LIGHT.color, 0, TORCH_LIGHT.distance, TORCH_LIGHT.decay);
   light.visible = false;
+  light.castShadow = false;
   scene.add(light);
   torchLights.push(light);
 }
 
-const syncTorchLights = (): void => {
+let nextTorchSyncAt = 0;
+const syncTorchLights = (now = performance.now()): void => {
+  if (now < nextTorchSyncAt) return;
+  nextTorchSyncAt = now + PERF.torchSyncEveryMs;
   if (dimension !== "overworld") {
     torchLights.forEach((light) => { light.intensity = 0; light.visible = false; });
     return;
@@ -1027,7 +1061,7 @@ const syncTorchLights = (): void => {
     y: Math.round(camera.position.y),
     z: Math.round(camera.position.z),
   };
-  const lit = torchesNear(world, center, 28).slice(0, MAX_TORCH_LIGHTS);
+  const lit = torchesNear(world, center, 22).slice(0, MAX_TORCH_LIGHTS);
   torchLights.forEach((light, index) => {
     const torch = lit[index];
     if (!torch) {
@@ -1632,7 +1666,7 @@ const syncRenderedChunks = (force = false): void => {
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
   if (dimension === "overworld") {
     // Infinite open world: generate missing chunks around the player before mesh rebuild.
-    const grew = world.ensureAround(camera.position.x, camera.position.z, STREAM_CHUNK_RADIUS);
+    const grew = world.ensureAround(camera.position.x, camera.position.z, PERF.streamChunkRadius);
     if (grew) force = true;
   }
   if (!force && chunkX === loadedChunkX && chunkZ === loadedChunkZ) return;
@@ -3374,7 +3408,7 @@ const frame = (now: number): void => {
     fog.color.copy(skyColor);
     cloudGroup.position.x = ((progress * 18) % 8) - 4;
     timeText.textContent = sunHeight > 0.22 ? "☀ 白昼" : "☾ 星夜";
-    syncTorchLights();
+    syncTorchLights(now);
   }
   findTarget();
   updateMining(delta);
