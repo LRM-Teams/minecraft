@@ -99,9 +99,9 @@ describe("Mob combat", () => {
     expect(["dirt", "stone"]).toContain(result.drops[0]);
   });
 
-  it("uses a distinct building-material drop table for each variety", () => {
+  it("uses a distinct drop table for each variety (brute yields raw beef)", () => {
     expect(mobDropCandidates("stalker")).toEqual(["dirt", "stone"]);
-    expect(mobDropCandidates("brute")).toEqual(["stone", "bricks"]);
+    expect(mobDropCandidates("brute")).toEqual(["raw_beef", "stone"]);
     expect(mobDropCandidates("wisp")).toEqual(["sand", "glass"]);
   });
 });

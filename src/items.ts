@@ -34,6 +34,11 @@ export const EXTRA_ITEMS = [
   "iron_hoe",
   "gold_hoe",
   "diamond_hoe",
+  "wheat",
+  "apple",
+  "bread",
+  "raw_beef",
+  "cooked_beef",
 ] as const;
 
 export type ExtraItem = (typeof EXTRA_ITEMS)[number];
@@ -146,4 +151,9 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   iron_hoe: "铁锄",
   gold_hoe: "金锄",
   diamond_hoe: "钻石锄",
+  wheat: "小麦",
+  apple: "苹果",
+  bread: "面包",
+  raw_beef: "生牛肉",
+  cooked_beef: "熟牛排",
 };

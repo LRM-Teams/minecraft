@@ -20,6 +20,25 @@ import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from 
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
 import { ITEM_LABELS, SWORD_DAMAGE, isTool, type ExtraItem } from "./items";
+import {
+  EXHAUSTION,
+  FOOD_DEFS,
+  FOOD_IDS,
+  MAX_FOOD_LEVEL,
+  addExhaustion,
+  appleDropFromLeaves,
+  canSprint,
+  createHungerState,
+  eatFood,
+  formatHungerBar,
+  pickFoodToEat,
+  isFoodId,
+  snapshotHunger,
+  tickHunger,
+  wheatDropFromGrass,
+  type FoodId,
+  type HungerState,
+} from "./hunger";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
 import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
 import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
@@ -66,6 +85,7 @@ app.innerHTML = `
     <div id="seed"></div>
     <div id="world-time"></div>
     <div id="health"></div>
+    <div id="hunger"></div>
     <div id="audio-state"></div>
     <div id="network-state"></div>
     <div id="village-state"></div>
@@ -76,7 +96,7 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉/睡床 · E 合成 · R 工具 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉/睡床 · E 合成 · R 工具 · T 进食 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -90,6 +110,7 @@ app.innerHTML = `
       <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
       <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
+      <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食</div>
       <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/床/村民交互。羊毛可在村庄屋内取得。</p>
     </aside>
   </div>
@@ -1137,6 +1158,7 @@ const status = document.querySelector<HTMLDivElement>("#status")!;
 const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
+const hungerText = document.querySelector<HTMLDivElement>("#hunger")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
@@ -1161,6 +1183,7 @@ const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
+let hunger: HungerState = createHungerState(saved?.player.hunger);
 const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
@@ -1285,6 +1308,30 @@ const renderHealth = (): void => {
 };
 renderHealth();
 
+const renderHunger = (): void => {
+  hungerText.textContent = `饥饿 ${formatHungerBar(hunger.foodLevel)} ${hunger.foodLevel}/${MAX_FOOD_LEVEL}`;
+};
+renderHunger();
+
+const tryEatFood = (): boolean => {
+  const foodId = pickFoodToEat(inventory);
+  if (!foodId) {
+    status.textContent = "背包里没有食物（苹果/面包/牛肉）";
+    return false;
+  }
+  if (!eatFood(hunger, foodId)) {
+    status.textContent = "饱食已满，吃不下了";
+    return false;
+  }
+  inventory[foodId] -= 1;
+  renderHunger();
+  renderHotbar();
+  dirty = true;
+  status.textContent = `进食 ${ITEM_LABELS[foodId]} · 饱食 ${hunger.foodLevel}/${MAX_FOOD_LEVEL}`;
+  soundscape.play("pickup");
+  return true;
+};
+
 const renderAudioState = (): void => {
   audioText.textContent = `M 音效：${soundscape.isEnabled ? "开" : "关"}`;
 };
@@ -1394,6 +1441,7 @@ const playerSave = (): PlayerSave => ({
   witherStars,
   spawnPoint: bedSpawn,
   dayPhaseMs: dayClock.phaseMs(),
+  hunger: snapshotHunger(hunger),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -1463,6 +1511,8 @@ const attackMobAtCrosshair = (): boolean => {
     const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
     if (!mob) return false;
     mob.hp = Math.max(0, mob.hp - (4 + (stations.equippedTool ? (SWORD_DAMAGE[stations.equippedTool] ?? 0) : 0)));
+    addExhaustion(hunger, EXHAUSTION.attack);
+    renderHunger();
     soundscape.play("hit");
     status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
     return true;
@@ -1524,6 +1574,17 @@ const edit = (place: boolean): void => {
       const removed = world.remove(target.position);
       if (removed) {
         inventory[removed] += 1;
+        const pos = target.position;
+        if (removed === "leaves" && appleDropFromLeaves(world.seed, pos.x, pos.y, pos.z)) {
+          inventory.apple += 1;
+          status.textContent = "树叶掉落了苹果";
+        }
+        if (removed === "grass" && wheatDropFromGrass(world.seed, pos.x, pos.y, pos.z)) {
+          inventory.wheat += 1;
+          status.textContent = "获得小麦";
+        }
+        addExhaustion(hunger, EXHAUSTION.mineBlock);
+        renderHunger();
         soundscape.play("break");
         room?.sendEdit({ action: "remove", position: target.position });
       }
@@ -1656,6 +1717,8 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   dimension = slot.save.player.dimension ?? "overworld";
   renderRaidState();
   playerHealth = maxPlayerHealth;
+  hunger = createHungerState(slot.save.player.hunger);
+  renderHunger();
   syncRenderedChunks(true);
   syncDimensionState();
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -1901,6 +1964,10 @@ document.addEventListener("keydown", (event) => {
       status.textContent = `手持 ${ITEM_LABELS[stations.equippedTool]}`;
     }
   }
+  if (event.code === "KeyT" && !event.repeat) {
+    soundscape.unlock();
+    tryEatFood();
+  }
   if (event.code === "Escape" && !event.repeat && anyStationOpen()) {
     closeCraft(stations, inventory);
     closeFurnace(stations);
@@ -1958,8 +2025,11 @@ addEventListener("resize", () => {
 const updatePlayer = (delta: number): void => {
   const inputX = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
   const inputZ = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
-  const speed = keys.has("ShiftLeft") ? 8 : 4.4;
+  const wantSprint = keys.has("ShiftLeft") && canSprint(hunger);
+  const speed = wantSprint ? 8 : 4.4;
   const size = currentSize();
+  const prevX = camera.position.x;
+  const prevZ = camera.position.z;
   if (inputX || inputZ) {
     const length = Math.hypot(inputX, inputZ);
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
@@ -1969,9 +2039,14 @@ const updatePlayer = (delta: number): void => {
     const nextGround = currentTopY(Math.round(nextX), Math.round(nextZ)) + 1.72;
     if (nextGround <= camera.position.y + 0.85) { camera.position.x = nextX; camera.position.z = nextZ; }
   }
+  const moved = Math.hypot(camera.position.x - prevX, camera.position.z - prevZ);
+  if (moved > 0) {
+    addExhaustion(hunger, moved * (wantSprint ? EXHAUSTION.sprintPerMeter : EXHAUSTION.walkPerMeter));
+  }
   if (grounded && keys.has("Space")) {
     verticalVelocity = 7.2;
     grounded = false;
+    addExhaustion(hunger, wantSprint ? EXHAUSTION.sprintJump : EXHAUSTION.jump);
     soundscape.play("jump");
   }
   verticalVelocity -= 19 * delta;
@@ -1979,6 +2054,25 @@ const updatePlayer = (delta: number): void => {
   const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
   if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
   if (camera.position.y < -8) camera.position.set(...respawnPoint());
+  const hungerTick = tickHunger(hunger, playerHealth, maxPlayerHealth, delta);
+  if (hungerTick.healthDelta !== 0) {
+    playerHealth = Math.max(0, Math.min(maxPlayerHealth, playerHealth + hungerTick.healthDelta));
+    if (playerHealth === 0) {
+      playerHealth = maxPlayerHealth;
+      hunger.foodLevel = MAX_FOOD_LEVEL;
+      hunger.saturation = MAX_FOOD_LEVEL;
+      hunger.exhaustion = 0;
+      camera.position.set(...respawnPoint());
+      verticalVelocity = 0;
+      status.textContent = "饥饿过度，已重生";
+      soundscape.play("respawn");
+    } else if (hungerTick.healthDelta < 0) {
+      status.textContent = "你饿得发抖…";
+      soundscape.play("hurt");
+    }
+    renderHealth();
+  }
+  if (moved > 0 || hungerTick.changed) renderHunger();
 };
 
 const updateMobs = (delta: number): void => {
@@ -1987,10 +2081,12 @@ const updateMobs = (delta: number): void => {
     drops.forEach((drop) => { inventory[drop] += 1; });
     renderHotbar();
     dirty = true;
-    status.textContent = `获得 ${drops.map((drop) => labels[drop]).join("、")}`;
+    status.textContent = `获得 ${drops.map((drop) => ITEM_LABELS[drop] ?? labels[drop as BlockType] ?? drop).join("、")}`;
     soundscape.play("pickup");
   }
   if (damageToPlayer > 0) {
+    addExhaustion(hunger, EXHAUSTION.damage);
+    renderHunger();
     playerHealth = Math.max(0, playerHealth - damageToPlayer);
     if (playerHealth === 0) {
       playerHealth = maxPlayerHealth;
