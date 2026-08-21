@@ -49,6 +49,7 @@ describe("VoxelWorld", () => {
     const world = new VoxelWorld(11, 32);
     const cx = 1;
     const cz = -1;
+    world.ensureAround(cx * 16 + 8, cz * 16 + 8, 0);
     const fromChunk = world.visibleBlocksInChunk(cx, cz);
     const fromRadius = world.visibleBlocks(cx * 16 + 8, cz * 16 + 8, 0);
     const keyOf = (p: { x: number; y: number; z: number }) => `${p.x},${p.y},${p.z}`;
@@ -56,6 +57,20 @@ describe("VoxelWorld", () => {
       new Set(fromRadius.map(({ position }) => keyOf(position))),
     );
     expect(fromChunk.every(({ position }) => world.chunkAt(position.x) === cx && world.chunkAt(position.z) === cz)).toBe(true);
+  });
+
+  it("spawns with a small eager ring and budgets ensureAround terrain gen", () => {
+    const world = new VoxelWorld(42, 48);
+    // Default construct must not eagerly fill the full size radius (avoids multi-second longtask).
+    expect(world.get(40, 1, 40)).toBeUndefined();
+    const before = world.topY(0, 0);
+    expect(before).toBeGreaterThanOrEqual(0);
+    // Budget 1: only one new chunk even when a full ring is missing far away.
+    const grewOnce = world.ensureAround(80, -64, 2, 1);
+    expect(grewOnce).toBe(true);
+    // Unbudgeted call fills the rest of the ring.
+    world.ensureAround(80, -64, 2);
+    expect(world.topY(80, -64)).toBeGreaterThanOrEqual(0);
   });
 
   it("builds a deterministic, enterable plains village with anchors for villagers", () => {
@@ -94,6 +109,8 @@ describe("VoxelWorld", () => {
     const seed = 991;
     const one = new VoxelWorld(seed, 40);
     const two = new VoxelWorld(seed, 40);
+    one.ensureRadius(0, 0, 40);
+    two.ensureRadius(0, 0, 40);
     expect(one.snapshot().blocks).toEqual(two.snapshot().blocks);
     // Flora (planks on the floor) plus trees (wood) must exist in the world.
     let planks = 0;
@@ -110,6 +127,8 @@ describe("VoxelWorld", () => {
     const seed = 2026;
     const one = new VoxelWorld(seed, 48);
     const two = new VoxelWorld(seed, 48);
+    one.ensureRadius(0, 0, 48);
+    two.ensureRadius(0, 0, 48);
     // Determinism: both worlds carve the exact same set of underground cells.
     expect(one.snapshot().blocks).toEqual(two.snapshot().blocks);
     // Carving happened: some deep cells became air well below the surface top.
@@ -132,6 +151,7 @@ describe("VoxelWorld", () => {
 
   it("embeds the five mineral ores underground, with rarer ores deeper and scarcer", () => {
     const world = new VoxelWorld(2026, 48);
+    world.ensureRadius(0, 0, 48);
     const counts: Record<string, number> = { coal_ore: 0, copper_ore: 0, iron_ore: 0, gold_ore: 0, diamond_ore: 0 };
     let surfaceOre = 0;
     let caveExposed = 0;
@@ -163,6 +183,7 @@ describe("VoxelWorld", () => {
 
   it("does not scatter random obsidian as an ore (portal / placed only)", () => {
     const world = new VoxelWorld(2026, 48);
+    world.ensureRadius(0, 0, 48);
     let deepObsidian = 0;
     world.blocks.forEach((type, key) => {
       if (type !== "obsidian") return;
@@ -174,6 +195,7 @@ describe("VoxelWorld", () => {
 
   it("round-trips mined ores through a snapshot for archive-compatible reloads", () => {
     const world = new VoxelWorld(2026, 48);
+    world.ensureRadius(0, 0, 48);
     // Find any ore cell and mine it away, then reload from a snapshot.
     const oreCell = [...world.blocks.entries()].find(([, type]) => type === "coal_ore");
     expect(oreCell).toBeTruthy();
