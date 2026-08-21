@@ -207,6 +207,51 @@ export const RECIPES: readonly Recipe[] = [
     ],
     result: { item: "bookshelf", count: 1 },
   },
+  // Vanilla brewing stand: blaze rod over 3 cobble/stone.
+  {
+    id: "brewing_stand",
+    width: 3,
+    pattern: [
+      cell(null), cell("blaze_rod"), cell(null),
+      cell(null), cell(null), cell(null),
+      cell("stone"), cell("stone"), cell("stone"),
+    ],
+    result: { item: "brewing_stand", count: 1 },
+  },
+  // Vanilla glass bottle: 3 glass in a V.
+  {
+    id: "glass_bottle",
+    width: 3,
+    pattern: [
+      cell("glass"), cell(null), cell("glass"),
+      cell(null), cell("glass"), cell(null),
+    ],
+    result: { item: "glass_bottle", count: 3 },
+  },
+  // Vanilla sugar: one sugar cane (shapeless).
+  {
+    id: "sugar",
+    width: 1,
+    pattern: [cell("sugar_cane")],
+    result: { item: "sugar", count: 1 },
+    shapeless: true,
+  },
+  // Vanilla blaze powder: one blaze rod → 2 powder.
+  {
+    id: "blaze_powder",
+    width: 1,
+    pattern: [cell("blaze_rod")],
+    result: { item: "blaze_powder", count: 2 },
+    shapeless: true,
+  },
+  // Vanilla-ish glistering melon: gold + fruit (apple stands in for melon).
+  {
+    id: "glistering_melon",
+    width: 2,
+    pattern: [cell("gold_ingot"), cell("apple")],
+    result: { item: "glistering_melon", count: 1 },
+    shapeless: true,
+  },
   // Vanilla bread: three wheat in a row (crafting table).
   {
     id: "bread",
@@ -412,6 +457,18 @@ const NON_TOOL_EXTRAS = new Set([
   "sugar_cane",
   "paper",
   "book",
+  "blaze_rod",
+  "blaze_powder",
+  "nether_wart",
+  "sugar",
+  "spider_eye",
+  "glistering_melon",
+  "glass_bottle",
+  "water_bottle",
+  "awkward_potion",
+  "potion_healing",
+  "potion_swiftness",
+  "potion_poison",
 ]);
 
 export const isToolItem = (item: ItemType): boolean =>

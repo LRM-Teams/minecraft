@@ -11,15 +11,16 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 #hunger { position: absolute; top: 102px; left: 24px; color: #f0c070; font-size: 12px; letter-spacing: 0.5px; }
 #armor { position: absolute; top: 121px; left: 24px; color: #b8d4e8; font-size: 12px; letter-spacing: 0.5px; }
 #xp { position: absolute; top: 140px; left: 24px; color: #b6f09a; font-size: 12px; letter-spacing: 0.5px; }
-#audio-state { position: absolute; top: 159px; left: 24px; color: #cbd7d0; font-size: 10px; opacity: .82; }
-#network-state { position: absolute; top: 176px; left: 24px; color: #a8d7e9; font-size: 10px; opacity: .9; }
-#village-state { position: absolute; top: 193px; left: 24px; color: #e9cf9a; font-size: 10px; opacity: .9; }
-#guardian-state { position: absolute; top: 210px; left: 24px; color: #c5ddae; font-size: 10px; opacity: .9; }
-#raid-state { position: absolute; top: 227px; left: 24px; color: #e9a99a; font-size: 10px; opacity: .9; }
-#biome-state { position: absolute; top: 244px; left: 24px; color: #d9c2ff; font-size: 10px; opacity: .9; }
-#dimension-state { position: absolute; top: 261px; left: 24px; color: #ff9f7a; font-size: 10px; opacity: .95; letter-spacing: .04em; }
-#wither-state { position: absolute; top: 283px; left: 24px; width: 170px; color: #d7b7ff; font-size: 10px; opacity: .95; letter-spacing: .03em; }
-#wither-star { position: absolute; top: 317px; left: 24px; color: #ffd76b; font-size: 10px; opacity: .95; letter-spacing: .03em; }
+#effects { position: absolute; top: 159px; left: 24px; color: #9ad7ff; font-size: 11px; letter-spacing: 0.4px; min-height: 14px; }
+#audio-state { position: absolute; top: 178px; left: 24px; color: #cbd7d0; font-size: 10px; opacity: .82; }
+#network-state { position: absolute; top: 195px; left: 24px; color: #a8d7e9; font-size: 10px; opacity: .9; }
+#village-state { position: absolute; top: 212px; left: 24px; color: #e9cf9a; font-size: 10px; opacity: .9; }
+#guardian-state { position: absolute; top: 229px; left: 24px; color: #c5ddae; font-size: 10px; opacity: .9; }
+#raid-state { position: absolute; top: 246px; left: 24px; color: #e9a99a; font-size: 10px; opacity: .9; }
+#biome-state { position: absolute; top: 263px; left: 24px; color: #d9c2ff; font-size: 10px; opacity: .9; }
+#dimension-state { position: absolute; top: 280px; left: 24px; color: #ff9f7a; font-size: 10px; opacity: .95; letter-spacing: .04em; }
+#wither-state { position: absolute; top: 302px; left: 24px; width: 170px; color: #d7b7ff; font-size: 10px; opacity: .95; letter-spacing: .03em; }
+#wither-star { position: absolute; top: 336px; left: 24px; color: #ffd76b; font-size: 10px; opacity: .95; letter-spacing: .03em; }
 .wither-bar { width: 100%; height: 8px; border: 2px solid #2c3339; background: #1a101c; margin-bottom: 3px; border-radius: 2px; }
 .wither-fill { height: 100%; background: linear-gradient(90deg, #7a1fa0, #c12bc8); transition: width .12s linear; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: 28px; font-weight: 300; }
@@ -33,6 +34,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .crafting_table { background: linear-gradient(135deg, #c49a5c 50%, #8b5a2b 50%); }.furnace { background: #6a6e72; border-color: #3a3d40; }
 .enchanting_table { background: radial-gradient(circle at 50% 40%, #c77dff 0 28%, #5a2a6e 29% 70%, #2b2333 71% 100%); }
 .bookshelf { background: linear-gradient(90deg, #8b5a2b 0 20%, #d7c4a0 20% 35%, #8b5a2b 35% 55%, #d7c4a0 55% 70%, #8b5a2b 70% 100%); }
+.brewing_stand { background: radial-gradient(circle at 50% 30%, #c9a06a 0 22%, #6a5a48 23% 65%, #3a3530 66% 100%); }
 .lapis_ore { background: #1f4fd8; border-color: #7a8186; }
 .obsidian { background: #2b2333; border-color: #5a4a6a; }
 .torch { background: radial-gradient(circle at 50% 30%, #ffe08a 0 35%, #c45a12 36% 55%, #5a3a22 56% 100%); }
@@ -46,6 +48,8 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .station-body, .furnace-body { display: grid; grid-template-columns: auto auto 1fr 1fr 1.1fr; gap: 12px; align-items: start; }
 .station-body.armor-layout { grid-template-columns: auto auto 1fr 1fr 1fr 1.1fr; }
 .furnace-body { grid-template-columns: auto 1fr 1fr; }
+.brew-bottles { display: flex; gap: 4px; }
+.furnace-bar.brew span { background: #7ec8ff; }
 .craft-grid { display: grid; gap: 4px; }
 .craft-grid.size-2 { grid-template-columns: repeat(2, 64px); }
 .craft-grid.size-3 { grid-template-columns: repeat(3, 64px); }

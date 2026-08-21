@@ -46,6 +46,24 @@ import {
   type Enchantment,
   type ExperienceState,
 } from "./enchanting";
+import {
+  BOTTLE_LABELS,
+  BREW_BOTTLE_ITEMS,
+  BREW_INGREDIENT_ITEMS,
+  INGREDIENT_LABELS,
+  canStartBrew,
+  createBrewingStand,
+  depositBottle,
+  depositFuel,
+  depositIngredient,
+  fillWaterBottle,
+  tickBrewingStand,
+  withdrawBottle,
+  withdrawIngredient,
+  type BrewBottle,
+  type BrewIngredient,
+  type BrewingStandState,
+} from "./brewing";
 
 export type CraftMode = "inventory" | "table";
 
@@ -61,6 +79,9 @@ export type StationController = {
   enchantKey: string | null;
   enchantTable: EnchantTableState;
   bookshelfPower: number;
+  brewOpen: boolean;
+  brewKey: string | null;
+  brewingStands: Map<string, BrewingStandState>;
 };
 
 export const createStations = (): StationController => ({
@@ -75,6 +96,9 @@ export const createStations = (): StationController => ({
   enchantKey: null,
   enchantTable: createEnchantTable(1),
   bookshelfPower: 0,
+  brewOpen: false,
+  brewKey: null,
+  brewingStands: new Map(),
 });
 
 export const openInventoryCraft = (stations: StationController, inventory: Inventory): void => {
@@ -84,6 +108,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
   }
   closeFurnace(stations);
   closeEnchant(stations, inventory);
+  closeBrew(stations, inventory);
   stations.craftMode = "inventory";
   stations.craftGrid = emptyGrid(2);
   stations.craftOpen = true;
@@ -92,6 +117,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
 export const openTableCraft = (stations: StationController, inventory: Inventory): void => {
   closeFurnace(stations);
   closeEnchant(stations, inventory);
+  closeBrew(stations, inventory);
   if (stations.craftOpen) refundGrid(inventory, stations.craftGrid);
   stations.craftMode = "table";
   stations.craftGrid = emptyGrid(3);
@@ -107,6 +133,7 @@ export const closeCraft = (stations: StationController, inventory: Inventory): v
 export const openFurnaceAt = (stations: StationController, inventory: Inventory, key: string): void => {
   closeCraft(stations, inventory);
   closeEnchant(stations, inventory);
+  closeBrew(stations, inventory);
   if (!stations.furnaces.has(key)) stations.furnaces.set(key, createFurnaceState());
   stations.furnaceKey = key;
   stations.furnaceOpen = true;
@@ -126,6 +153,7 @@ export const openEnchantAt = (
 ): void => {
   closeCraft(stations, inventory);
   closeFurnace(stations);
+  closeBrew(stations, inventory);
   if (stations.enchantOpen && stations.enchantKey !== key) {
     closeEnchant(stations, inventory);
   }
@@ -147,13 +175,43 @@ export const closeEnchant = (stations: StationController, inventory: Inventory):
   stations.enchantKey = null;
 };
 
+export const openBrewAt = (stations: StationController, inventory: Inventory, key: string): void => {
+  closeCraft(stations, inventory);
+  closeFurnace(stations);
+  closeEnchant(stations, inventory);
+  if (stations.brewOpen && stations.brewKey !== key) {
+    closeBrew(stations, inventory);
+  }
+  if (!stations.brewingStands.has(key)) stations.brewingStands.set(key, createBrewingStand());
+  stations.brewKey = key;
+  stations.brewOpen = true;
+};
+
+export const closeBrew = (stations: StationController, inventory: Inventory): void => {
+  if (!stations.brewOpen) return;
+  void inventory;
+  stations.brewOpen = false;
+  stations.brewKey = null;
+};
+
 export const activeFurnace = (stations: StationController): FurnaceState | undefined =>
   stations.furnaceKey ? stations.furnaces.get(stations.furnaceKey) : undefined;
+
+export const activeBrewingStand = (stations: StationController): BrewingStandState | undefined =>
+  stations.brewKey ? stations.brewingStands.get(stations.brewKey) : undefined;
 
 export const tickAllFurnaces = (stations: StationController, delta: number): boolean => {
   let changed = false;
   stations.furnaces.forEach((state) => {
     if (tickFurnace(state, delta)) changed = true;
+  });
+  return changed;
+};
+
+export const tickAllBrewingStands = (stations: StationController, delta: number): boolean => {
+  let changed = false;
+  stations.brewingStands.forEach((state) => {
+    if (tickBrewingStand(state, delta)) changed = true;
   });
   return changed;
 };
@@ -415,6 +473,89 @@ export const handleEnchantClick = (
       ctx.onEnchanted?.(result, offer);
       if (isArmor(result.item)) ctx.applyArmorEnchants?.(result.item, result.enchantments);
     }
+    return true;
+  }
+  return false;
+};
+
+export const renderBrewPanelHtml = (stand: BrewingStandState, inventory: Inventory): string => {
+  const brewPct = stand.brewDuration > 0 ? Math.round((stand.brewProgress / stand.brewDuration) * 100) : 0;
+  const bottleBtns = stand.bottles
+    .map((bottle, index) => {
+      const label = bottle ? BOTTLE_LABELS[bottle] : `瓶槽 ${index + 1}`;
+      return `<button type="button" class="station-cell" data-brew-slot="${index}">${label}</button>`;
+    })
+    .join("");
+  const bagBottles = ownedItems(inventory)
+    .filter((item) => BREW_BOTTLE_ITEMS.includes(item as BrewBottle))
+    .map((item) => `<button type="button" class="station-bag" data-brew-bottle="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`)
+    .join("") || "<p class='station-empty'>无瓶子/药水</p>";
+  const bagIng = ownedItems(inventory)
+    .filter((item) => BREW_INGREDIENT_ITEMS.includes(item as BrewIngredient))
+    .map((item) => `<button type="button" class="station-bag" data-brew-ingredient="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`)
+    .join("") || "<p class='station-empty'>无酿造材料</p>";
+  const fuelBtn = (inventory.blaze_powder ?? 0) > 0
+    ? `<button type="button" class="station-bag" data-brew-fuel>放入烈焰粉 <small>${inventory.blaze_powder}</small></button>`
+    : "<p class='station-empty'>无烈焰粉</p>";
+  const fillBtn = (inventory.glass_bottle ?? 0) > 0
+    ? `<button type="button" class="station-bag" data-brew-fill>灌装水瓶 <small>${inventory.glass_bottle}</small></button>`
+    : "<p class='station-empty'>无空瓶</p>";
+  const ready = canStartBrew(stand) ? "酿造中…" : "等待材料/燃料";
+
+  return `
+    <div class="station-head"><strong>酿造台 · 燃料 ${stand.fuel} · ${ready}</strong><button type="button" data-brew-close>关闭 Esc</button></div>
+    <div class="furnace-body brew-body">
+      <div class="furnace-slots">
+        <button type="button" class="station-cell" data-brew-ingredient-slot>${stand.ingredient ? INGREDIENT_LABELS[stand.ingredient] : "材料"}</button>
+        <div class="furnace-bars"><div class="furnace-bar brew"><span style="width:${brewPct}%"></span></div></div>
+        <div class="brew-bottles">${bottleBtns}</div>
+        <button type="button" class="station-cell">烈焰粉燃料 ×${stand.fuel}</button>
+      </div>
+      <div class="station-col"><h4>瓶子</h4><div class="station-bag-list">${bagBottles}</div></div>
+      <div class="station-col"><h4>材料 / 燃料</h4><div class="station-bag-list">${bagIng}${fuelBtn}${fillBtn}</div></div>
+    </div>
+  `;
+};
+
+export const handleBrewClick = (
+  stations: StationController,
+  inventory: Inventory,
+  target: HTMLElement,
+): boolean => {
+  const stand = activeBrewingStand(stations);
+  if (!stand || !stations.brewOpen) return false;
+  if (target.closest("[data-brew-close]")) {
+    closeBrew(stations, inventory);
+    return true;
+  }
+  if (target.closest("[data-brew-fill]")) {
+    fillWaterBottle(inventory);
+    return true;
+  }
+  if (target.closest("[data-brew-fuel]")) {
+    depositFuel(stand, inventory, 1);
+    return true;
+  }
+  const bottleBtn = target.closest<HTMLElement>("[data-brew-bottle]");
+  if (bottleBtn?.dataset.brewBottle) {
+    const item = bottleBtn.dataset.brewBottle as BrewBottle;
+    const emptySlot = stand.bottles.findIndex((entry) => entry === null);
+    const slot = (emptySlot >= 0 ? emptySlot : 0) as 0 | 1 | 2;
+    depositBottle(stand, inventory, item, slot);
+    return true;
+  }
+  const ingBtn = target.closest<HTMLElement>("[data-brew-ingredient]");
+  if (ingBtn?.dataset.brewIngredient) {
+    depositIngredient(stand, inventory, ingBtn.dataset.brewIngredient as BrewIngredient);
+    return true;
+  }
+  if (target.closest("[data-brew-ingredient-slot]")) {
+    withdrawIngredient(stand, inventory);
+    return true;
+  }
+  const slotBtn = target.closest<HTMLElement>("[data-brew-slot]");
+  if (slotBtn?.dataset.brewSlot !== undefined) {
+    withdrawBottle(stand, inventory, Number(slotBtn.dataset.brewSlot) as 0 | 1 | 2);
     return true;
   }
   return false;
