@@ -14,8 +14,16 @@ import {
   type CraftCursor,
   type CraftPointerButton,
 } from "./crafting";
-import type { Inventory } from "./inventory";
+import {
+  clickInvSlot,
+  HOTBAR_START,
+  MAIN_INV_SIZE,
+  PLAYER_INV_SIZE,
+  type Inventory,
+  type InvSlot,
+} from "./inventory";
 import { ITEM_LABELS, isArmor, isTool, type ExtraItem, type ItemType } from "./items";
+import { iconFor } from "./icons";
 import {
   createFurnaceState,
   depositFurnace,
@@ -229,19 +237,51 @@ export const tickAllBrewingStands = (stations: StationController, delta: number)
   return changed;
 };
 
+const renderInvCellHtml = (slots: readonly InvSlot[], index: number): string => {
+  const stack = slots[index];
+  if (!stack) {
+    return `<button type="button" class="inv-cell empty" data-inv-slot="${index}" title="空"></button>`;
+  }
+  const title = `${ITEM_LABELS[stack.item]}${stack.count > 1 ? ` ×${stack.count}` : ""}`;
+  const src = iconFor(stack.item);
+  const face = src
+    ? `<img class="inv-icon" src="${src}" alt="${title}" draggable="false" />`
+    : `<span class="inv-fallback">${ITEM_LABELS[stack.item].slice(0, 2)}</span>`;
+  const count = stack.count > 1 ? `<small>${stack.count}</small>` : "";
+  return `<button type="button" class="inv-cell" data-inv-slot="${index}" title="${title}">${face}${count}</button>`;
+};
+
+const renderPlayerInvGridHtml = (slots: readonly InvSlot[]): string => {
+  const padded = slots.length >= PLAYER_INV_SIZE
+    ? slots
+    : [...slots, ...Array.from({ length: PLAYER_INV_SIZE - slots.length }, () => null)];
+  const main = Array.from({ length: MAIN_INV_SIZE }, (_, i) => renderInvCellHtml(padded, i)).join("");
+  const hot = Array.from({ length: PLAYER_INV_SIZE - HOTBAR_START }, (_, i) =>
+    renderInvCellHtml(padded, HOTBAR_START + i),
+  ).join("");
+  return `
+    <div class="player-inv">
+      <h4>背包格子 · 拖拽整理</h4>
+      <div class="inv-grid main">${main}</div>
+      <div class="inv-grid hotbar">${hot}</div>
+    </div>
+  `;
+};
+
 export const renderCraftPanelHtml = (
   stations: StationController,
   inventory: Inventory,
   armor: ArmorState,
+  playerSlots?: readonly InvSlot[],
 ): string => {
   const size = stations.craftMode === "table" ? 3 : 2;
-  const title = stations.craftMode === "table" ? "工作台 3×3" : "背包合成 2×2";
+  const title = stations.craftMode === "table" ? "工作台 3×3" : "背包 · 2×2 合成";
   const recipe = matchRecipe(stations.craftGrid);
   const resultLabel = recipe ? `${ITEM_LABELS[recipe.result.item]} ×${recipe.result.count}` : "—";
   const cursor = stations.craftCursor;
   const cursorLabel = cursor
     ? `光标 ${ITEM_LABELS[cursor.item]} ×${cursor.count}`
-    : "光标 空 · 左键取放 · 右键半组/放1 · Shift+左键产物连做";
+    : "光标 空 · 左键取放 · 右键半组/放1 · 格子可拖拽";
   const cells = stations.craftGrid.map((cell, index) => {
     const stack = asStack(cell);
     const label = stack
@@ -249,9 +289,14 @@ export const renderCraftPanelHtml = (
       : "";
     return `<button type="button" class="station-cell" data-craft-cell="${index}">${label}</button>`;
   }).join("");
-  const bag = ownedItems(inventory).map((item) =>
-    `<button type="button" class="station-bag" data-craft-item="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`,
-  ).join("") || "<p class='station-empty'>背包为空</p>";
+  const slotGrid = playerSlots
+    ? renderPlayerInvGridHtml(playerSlots)
+    : (() => {
+        const bag = ownedItems(inventory).map((item) =>
+          `<button type="button" class="station-bag" data-craft-item="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`,
+        ).join("") || "<p class='station-empty'>背包为空</p>";
+        return `<div class="station-col"><h4>背包</h4><div class="station-bag-list">${bag}</div></div>`;
+      })();
   const book = listRecipes()
     .filter((entry) => !entry.id.endsWith("_mirror"))
     .map((entry) => {
@@ -280,10 +325,10 @@ export const renderCraftPanelHtml = (
 
   return `
     <div class="station-head"><strong>${title}</strong><span class="craft-cursor">${cursorLabel}</span><button type="button" data-craft-close>关闭 Esc</button></div>
-    <div class="station-body armor-layout">
+    <div class="station-body armor-layout inv-layout">
       <div class="craft-grid size-${size}">${cells}</div>
       <button type="button" class="craft-result" data-craft-take title="左键取到光标 · Shift+左键连做到背包">${resultLabel}</button>
-      <div class="station-col"><h4>背包</h4><div class="station-bag-list">${bag}</div></div>
+      ${slotGrid}
       <div class="station-col"><h4>手持工具</h4><div class="station-bag-list">${tools}</div></div>
       <div class="station-col"><h4>护甲 ${totalArmorPoints(armor)}/20</h4><div class="station-bag-list">${worn}${armorBtns}</div></div>
       <div class="station-col recipe-book"><h4>配方</h4>${book}</div>
@@ -371,12 +416,22 @@ export const handleCraftClick = (
   inventory: Inventory,
   target: HTMLElement,
   armor?: ArmorState,
-  options: CraftClickOptions = {},
+  options: CraftClickOptions & { playerSlots?: InvSlot[] } = {},
 ): boolean => {
   const button: CraftPointerButton = options.button ?? "left";
   const shift = Boolean(options.shift);
   if (target.closest("[data-craft-close]")) {
     closeCraft(stations, inventory);
+    return true;
+  }
+  const invCell = target.closest<HTMLElement>("[data-inv-slot]");
+  if (invCell?.dataset.invSlot !== undefined && options.playerSlots) {
+    stations.craftCursor = clickInvSlot(
+      options.playerSlots,
+      stations.craftCursor,
+      Number(invCell.dataset.invSlot),
+      button,
+    );
     return true;
   }
   const cell = target.closest<HTMLElement>("[data-craft-cell]");
