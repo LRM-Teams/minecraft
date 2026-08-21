@@ -121,11 +121,19 @@ describe("VoxelWorld", () => {
     const world = new VoxelWorld(2026, 48);
     const counts: Record<string, number> = { coal_ore: 0, copper_ore: 0, iron_ore: 0, gold_ore: 0, diamond_ore: 0 };
     let surfaceOre = 0;
+    let caveExposed = 0;
     world.blocks.forEach((type, key) => {
       if (!(type in counts)) return;
       counts[type] += 1;
-      const y = Number(key.split(",")[1]);
+      const [xs, ys, zs] = key.split(",");
+      const x = Number(xs);
+      const y = Number(ys);
+      const z = Number(zs);
       if (y > 12) surfaceOre += 1;
+      const neighbors = [
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+      ] as const;
+      if (neighbors.some(([dx, dy, dz]) => !world.get(x + dx, y + dy, z + dz))) caveExposed += 1;
     });
     // All five ores appear.
     Object.values(counts).forEach((count) => expect(count).toBeGreaterThan(0));
@@ -133,8 +141,22 @@ describe("VoxelWorld", () => {
     expect(counts.diamond_ore).toBeLessThan(counts.iron_ore);
     expect(counts.diamond_ore).toBeLessThan(counts.copper_ore);
     expect(counts.gold_ore).toBeLessThan(counts.coal_ore);
+    expect(counts.coal_ore).toBeGreaterThan(counts.iron_ore);
     // No ore leaks into the near-surface band (ore maxY is 12; keep top soil clean).
     expect(surfaceOre).toBe(0);
+    // Caves reliably expose some ore faces for the dig→smelt loop.
+    expect(caveExposed).toBeGreaterThan(0);
+  });
+
+  it("does not scatter random obsidian as an ore (portal / placed only)", () => {
+    const world = new VoxelWorld(2026, 48);
+    let deepObsidian = 0;
+    world.blocks.forEach((type, key) => {
+      if (type !== "obsidian") return;
+      const y = Number(key.split(",")[1]);
+      if (y <= 12) deepObsidian += 1;
+    });
+    expect(deepObsidian).toBe(0);
   });
 
   it("round-trips mined ores through a snapshot for archive-compatible reloads", () => {

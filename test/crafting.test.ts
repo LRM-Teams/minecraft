@@ -247,4 +247,20 @@ describe("vanilla furnace smelting", () => {
     tickFurnace(furnace, 10);
     expect(furnace.output?.item).toBe("glass");
   });
+
+  it("does not smelt coal_ore or diamond_ore (gemify on mine instead)", () => {
+    const inventory = createInventory({ coal_ore: 1, diamond_ore: 1, coal: 1 });
+    const furnace = createFurnaceState();
+    expect(depositFurnace(furnace, inventory, "coal_ore", "input")).toBe(false);
+    expect(depositFurnace(furnace, inventory, "diamond_ore", "input")).toBe(false);
+  });
+
+  it("smelts copper ore with coal into copper ingot", () => {
+    const inventory = createInventory({ copper_ore: 1, coal: 1 });
+    const furnace = createFurnaceState();
+    expect(depositFurnace(furnace, inventory, "copper_ore", "input")).toBe(true);
+    expect(depositFurnace(furnace, inventory, "coal", "fuel")).toBe(true);
+    tickFurnace(furnace, 10);
+    expect(furnace.output).toEqual({ item: "copper_ingot", count: 1 });
+  });
 });
