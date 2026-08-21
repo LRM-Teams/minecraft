@@ -1,6 +1,6 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "crafting_table", "furnace"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 export const CHUNK_SIZE = 16;
 

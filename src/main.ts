@@ -12,13 +12,28 @@ import {
   type WitherBoss,
   type WitherSkull,
 } from "./wither";
-import { craftBricks, craftGlass, craftPlanks, createInventory, type Inventory } from "./inventory";
+import { craftBricks, craftPlanks, createInventory, type Inventory } from "./inventory";
 import { breakDuration, isMineable } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
+import { ITEM_LABELS, SWORD_DAMAGE, isTool, type ExtraItem } from "./items";
+import {
+  closeCraft,
+  closeFurnace,
+  createStations,
+  handleCraftClick,
+  handleFurnaceClick,
+  openFurnaceAt,
+  openInventoryCraft,
+  openTableCraft,
+  renderCraftPanelHtml,
+  renderFurnacePanelHtml,
+  tickAllFurnaces,
+  activeFurnace,
+} from "./stations";
 import {
   createPortalLink,
   defaultPortalGeometry,
@@ -58,17 +73,19 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键长按挖掘/攻击 · 右键放置 · N 搭建/点燃传送门 · B 末地之门 · H 摆放灵魂沙+头颅召唤凋灵 · G 图鉴 · P 村庄坐标</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉 · E 合成 · R 工具 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
+    <div id="craft-panel" class="station-panel hidden"></div>
+    <div id="furnace-panel" class="station-panel hidden"></div>
     <aside id="codex" class="hidden">
-      <div class="codex-title">方块图鉴 <small>G 关闭</small></div>
-      <p>采集基础：草、泥土、石头、原木、树叶、沙子和水。</p>
-      <p>建筑方块：木板、石砖、玻璃。</p>
-      <div class="recipe"><kbd>C</kbd> 原木 ×1 <span>→</span> 木板 ×4</div>
-      <div class="recipe"><kbd>V</kbd> 石头 ×4 <span>→</span> 石砖 ×4</div>
-      <div class="recipe"><kbd>F</kbd> 沙子 ×4 <span>→</span> 玻璃 ×4</div>
-      <p class="codex-note">数字键 1–0 或滚轮切换方块；玻璃适合采光建筑。</p>
+      <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
+      <p>对标原版：背包 <kbd>E</kbd> 开 2×2 合成；放置工作台后右键开 3×3；熔炉烧炼矿石/沙子。</p>
+      <p>流程：原木→木板→木棍→工作台→熔炉→烧锭→铁/金/钻工具。</p>
+      <div class="recipe"><kbd>C</kbd> 原木 → 木板 ×4（快捷）</div>
+      <div class="recipe"><kbd>V</kbd> 石头 ×4 → 石砖 ×4（快捷）</div>
+      <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
+      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/村民交互。</p>
     </aside>
   </div>
   <div id="start-screen">
@@ -77,7 +94,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置<br/>1–0 / 滚轮切换方块　C 木板 · V 石砖 · F 玻璃 · G 图鉴 · M 音效 · N 下界传送门 · B 末地之门 · H 召唤凋灵 BOSS（灵魂沙+头颅）</p>
+      <p class="keys">WASD / 方向键移动　空格跳跃　鼠标视角<br/>左键长按破坏 / 瞄准敌对体攻击　右键放置或开工作台/熔炉<br/>1–0 / 滚轮切换方块　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效 · N 下界 · B 末地 · H 凋灵</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -182,9 +199,11 @@ const colors: Record<BlockType, number> = {
   iron_ore: 0xc9a06a,
   gold_ore: 0xe8c94c,
   diamond_ore: 0x5ad2d0,
+  crafting_table: 0xb8874c,
+  furnace: 0x6a6e72,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", crafting_table: "工作台", furnace: "熔炉",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -1058,6 +1077,9 @@ const joinRoomButton = document.querySelector<HTMLButtonElement>("#join-room")!;
 const roomStatus = document.querySelector<HTMLElement>("#room-status")!;
 let selected = saved?.player.selected ?? 0;
 let inventory: Inventory = createInventory(saved?.player.inventory);
+const stations = createStations();
+const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
+const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
 const soundscape = new Soundscape();
@@ -1158,9 +1180,26 @@ const renderHotbar = (): void => {
     const keyLabel = index === 9 ? "0" : index + 1;
     return `<div class="slot ${index === selected ? "selected" : ""}">${keyLabel}<span class="swatch ${type}"></span><small>${inventory[type]}</small></div>`;
   }).join("");
-  status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}` : "空槽";
+  const toolLabel = stations.equippedTool ? ` · 工具 ${ITEM_LABELS[stations.equippedTool]}` : "";
+  status.textContent = BLOCK_TYPES[selected] ? `${labels[BLOCK_TYPES[selected]]} · ${inventory[BLOCK_TYPES[selected]]}${toolLabel}` : `空槽${toolLabel}`;
 };
 renderHotbar();
+
+const refreshStationsUi = (): void => {
+  craftPanel.classList.toggle("hidden", !stations.craftOpen);
+  furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
+  if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory);
+  if (stations.furnaceOpen) {
+    const furnace = activeFurnace(stations);
+    if (furnace) furnacePanel.innerHTML = renderFurnacePanelHtml(furnace, inventory);
+  }
+};
+
+const anyStationOpen = (): boolean => stations.craftOpen || stations.furnaceOpen;
+
+const releasePointerForUi = (): void => {
+  if (document.pointerLockElement) document.exitPointerLock();
+};
 
 const renderHealth = (): void => {
   healthText.textContent = `生命 ${"♥".repeat(playerHealth)}${"♡".repeat(maxPlayerHealth - playerHealth)}`;
@@ -1331,7 +1370,7 @@ const attackMobAtCrosshair = (): boolean => {
   if (mobId !== undefined) {
     const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
     if (!mob) return false;
-    mob.hp = Math.max(0, mob.hp - 4);
+    mob.hp = Math.max(0, mob.hp - (4 + (stations.equippedTool ? (SWORD_DAMAGE[stations.equippedTool] ?? 0) : 0)));
     soundscape.play("hit");
     status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
     return true;
@@ -1436,7 +1475,7 @@ const updateMining = (delta: number): void => {
     miningKey = key;
     miningProgress = 0;
   }
-  miningProgress = Math.min(1, miningProgress + delta / breakDuration(block));
+  miningProgress = Math.min(1, miningProgress + delta / breakDuration(block, stations.equippedTool));
   status.textContent = `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`;
   if (miningProgress >= 1) {
     edit(false);
@@ -1613,10 +1652,38 @@ renderWorldSlots();
 const lockWorld = (): void => { void renderer.domElement.requestPointerLock(); };
 playButton.addEventListener("click", lockWorld);
 renderer.domElement.addEventListener("mousedown", (event) => {
+  if (anyStationOpen()) return;
   if (document.pointerLockElement !== renderer.domElement) { lockWorld(); return; }
   soundscape.unlock();
   if (event.button === 0 && !attackWitherAtCrosshair() && !attackMobAtCrosshair()) mineHeld = true;
-  if (event.button === 2) edit(true);
+  if (event.button === 2) {
+    if (dimension === "overworld" && target) {
+      const aimed = world.get(target.position.x, target.position.y, target.position.z);
+      if (aimed === "crafting_table") {
+        openTableCraft(stations, inventory);
+        releasePointerForUi();
+        refreshStationsUi();
+        status.textContent = "工作台已打开";
+        return;
+      }
+      if (aimed === "furnace") {
+        const key = `${target.position.x},${target.position.y},${target.position.z}`;
+        openFurnaceAt(stations, inventory, key);
+        releasePointerForUi();
+        refreshStationsUi();
+        status.textContent = "熔炉已打开";
+        return;
+      }
+    }
+    const nearVillager = villagers.find((v) =>
+      !v.dead && Math.hypot(camera.position.x - v.x, camera.position.z - v.z) <= v.interactRange,
+    );
+    if (nearVillager) {
+      interactVillager();
+      return;
+    }
+    edit(true);
+  }
 });
 renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
 document.addEventListener("mouseup", (event) => { if (event.button === 0) stopMining(); });
@@ -1653,11 +1720,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.code === "KeyF" && !event.repeat) {
     soundscape.unlock();
-    if (craftGlass(inventory)) {
-      finishCraft("glass");
-    } else {
-      status.textContent = "需要 4 个沙子";
-    }
+    status.textContent = "玻璃请用熔炉烧沙子（原版烧炼，快捷合成已关闭）";
   }
   if (event.code === "KeyG" && !event.repeat) toggleCodex();
   if (event.code === "KeyP" && !event.repeat) {
@@ -1666,7 +1729,31 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.code === "KeyE" && !event.repeat) {
     soundscape.unlock();
-    interactVillager();
+    openInventoryCraft(stations, inventory);
+    if (stations.craftOpen) releasePointerForUi();
+    refreshStationsUi();
+    renderHotbar();
+    status.textContent = stations.craftOpen ? "背包合成 2×2" : "合成已关闭";
+  }
+  if (event.code === "KeyR" && !event.repeat) {
+    const tools = (Object.entries(inventory) as [ExtraItem | string, number][])
+      .filter(([item, count]) => count > 0 && isTool(item as ExtraItem))
+      .map(([item]) => item as ExtraItem);
+    if (!tools.length) {
+      status.textContent = "还没有工具，先用 E 合成";
+    } else {
+      const index = stations.equippedTool ? tools.indexOf(stations.equippedTool) : -1;
+      stations.equippedTool = tools[(index + 1) % tools.length];
+      renderHotbar();
+      status.textContent = `手持 ${ITEM_LABELS[stations.equippedTool]}`;
+    }
+  }
+  if (event.code === "Escape" && !event.repeat && anyStationOpen()) {
+    closeCraft(stations, inventory);
+    closeFurnace(stations);
+    refreshStationsUi();
+    renderHotbar();
+    return;
   }
   if (event.code === "KeyN" && !event.repeat) {
     soundscape.unlock();
@@ -2203,7 +2290,28 @@ const frame = (now: number): void => {
   }
   findTarget();
   updateMining(delta);
+  if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
   if (!rendererLost) renderer.render(scene, camera);
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);
+
+craftPanel.addEventListener("click", (event) => {
+  const target = event.target as HTMLElement;
+  if (!handleCraftClick(stations, inventory, target)) return;
+  soundscape.play("craft");
+  refreshStationsUi();
+  renderHotbar();
+  dirty = true;
+  persist();
+});
+
+furnacePanel.addEventListener("click", (event) => {
+  const target = event.target as HTMLElement;
+  if (!handleFurnaceClick(stations, inventory, target)) return;
+  soundscape.play("craft");
+  refreshStationsUi();
+  renderHotbar();
+  dirty = true;
+  persist();
+});
