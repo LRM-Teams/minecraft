@@ -95,6 +95,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .station-head button, .station-bag, .station-cell, .craft-result { pointer-events: auto; width: auto; padding: 6px 8px; border: 1px solid #7e9ca1; background: #243238; color: #edf7ff; font: inherit; font-size: 11px; box-shadow: none; cursor: pointer; }
 .station-body, .furnace-body { display: grid; grid-template-columns: auto auto 1fr 1fr 1.1fr; gap: 12px; align-items: start; }
 .station-body.armor-layout { grid-template-columns: auto auto 1fr 1fr 1fr 1.1fr; }
+.station-body.inv-layout { grid-template-columns: auto auto minmax(220px, 1.4fr) 1fr 1fr 1.1fr; }
 .furnace-body { grid-template-columns: auto 1fr 1fr; }
 .brew-bottles { display: flex; gap: 4px; }
 .furnace-bar.brew span { background: #7ec8ff; }
@@ -103,6 +104,16 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .craft-grid.size-3 { grid-template-columns: repeat(3, 64px); }
 .station-cell { width: 64px; height: 64px; display: grid; place-items: center; text-align: center; line-height: 1.2; }
 .craft-result { min-width: 88px; min-height: 64px; background: #3d5a3a; border-color: #f2db83; }
+.player-inv h4 { margin: 0 0 6px; color: #f1dda3; font-size: 12px; }
+.inv-grid { display: grid; gap: 3px; margin-bottom: 8px; }
+.inv-grid.main { grid-template-columns: repeat(9, 36px); }
+.inv-grid.hotbar { grid-template-columns: repeat(9, 36px); padding-top: 4px; border-top: 1px solid #3a4548; }
+.inv-cell { position: relative; width: 36px; height: 36px; padding: 2px; border: 1px solid #7e9ca1; background: #1a2428; color: #edf7ff; cursor: pointer; display: grid; place-items: center; box-shadow: none; font: inherit; }
+.inv-cell.empty { background: #141c20; }
+.inv-cell:hover { border-color: #f2db83; }
+.inv-icon { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+.inv-fallback { font-size: 9px; line-height: 1.1; text-align: center; pointer-events: none; }
+.inv-cell small { position: absolute; right: 2px; bottom: 1px; font-size: 9px; color: #fff; text-shadow: 0 1px 1px #000; pointer-events: none; }
 .station-col h4 { margin: 0 0 6px; color: #f1dda3; font-size: 12px; }
 .station-bag-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 220px; overflow: auto; }
 .station-bag small { color: #b7c9c3; }

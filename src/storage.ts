@@ -1,11 +1,12 @@
 import { VoxelWorld, type WorldSnapshot } from "./world";
 import type { NetherSnapshot } from "./nether";
 import type { EndSnapshot } from "./end";
-import type { Inventory } from "./inventory";
+import type { Inventory, ItemStack } from "./inventory";
 import type { ArmorSave } from "./armor";
 import type { EnchantSave } from "./enchanting";
 import type { BrewingSave } from "./brewing";
 import type { RedstoneSave } from "./redstone";
+import type { DroppedItemSave } from "./drops";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
@@ -19,7 +20,12 @@ export type PlayerSave = {
   yaw: number;
   pitch: number;
   selected: number;
+  /** Legacy count-map bag (still written for older readers / derived checks). */
   inventory?: Partial<Inventory>;
+  /** Vanilla-style 36 inventory cells (27 main + 9 hotbar). Preferred on load. */
+  slots?: Array<ItemStack | null>;
+  /** World item entities waiting to be picked up. */
+  drops?: DroppedItemSave[];
   dimension?: "overworld" | "nether" | "end";
   nether?: NetherSnapshot;
   end?: EndSnapshot;
