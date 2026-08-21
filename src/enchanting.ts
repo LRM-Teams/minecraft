@@ -376,6 +376,7 @@ export const miningXpFor = (block: string): number => {
     case "gold_ore":
       return 2;
     case "lapis_ore":
+    case "redstone_ore":
       return 3;
     case "diamond_ore":
       return 5;

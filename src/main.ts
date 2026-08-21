@@ -80,6 +80,21 @@ import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycy
 import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
 import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
 import {
+  canPlaceRedstoneDeviceAt,
+  canPlaceRedstoneDustAt,
+  canPlaceRedstoneLampAt,
+  clearLeverAt,
+  computeRedstoneNetwork,
+  createLeverStates,
+  isLampLitAt,
+  isTorchOnAt,
+  redstoneDropCount,
+  serializeRedstone,
+  toggleLeverAt,
+  wirePowerAt,
+  type LeverStates,
+} from "./redstone";
+import {
   activeBrewingStand,
   activeFurnace,
   closeBrew,
@@ -252,6 +267,17 @@ scene.add(cloudGroup);
 const moonMaterial = new THREE.MeshBasicMaterial({ color: 0xf7f2d2, transparent: true, opacity: 0 });
 const moon = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 12), moonMaterial);
 scene.add(moon);
+
+/** Live redstone solve used by the block renderer (updated after edits / load). */
+let redstoneNet = {
+  wirePower: new Map<string, number>(),
+  torchOn: new Map<string, boolean>(),
+  lampLit: new Map<string, boolean>(),
+};
+let leverStates: LeverStates = {};
+let refreshRedstone: () => void = () => {
+  /* assigned once `world` exists */
+};
 const starPositions: number[] = [];
 for (let index = 0; index < 220; index += 1) {
   const theta = index * 2.3999632297;
@@ -281,6 +307,7 @@ const colors: Record<BlockType, number> = {
   gold_ore: 0xe8c94c,
   diamond_ore: 0x5ad2d0,
   lapis_ore: 0x1f4fd8,
+  redstone_ore: 0xb01010,
   obsidian: 0x2b2333,
   crafting_table: 0xb8874c,
   furnace: 0x6a6e72,
@@ -290,9 +317,13 @@ const colors: Record<BlockType, number> = {
   torch: 0xffc15a,
   wool: 0xf0ebe3,
   bed: 0xc43c3c,
+  redstone_dust: 0xc41e1e,
+  lever: 0x8a7a5a,
+  redstone_torch: 0xff3030,
+  redstone_lamp: 0x5a4030,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", redstone_ore: "红石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床", redstone_dust: "红石粉", lever: "拉杆", redstone_torch: "红石火把", redstone_lamp: "红石灯",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -365,7 +396,7 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     }
   } else if (type === "grass" && face === "bottom") {
     paint(new THREE.Color(colors.dirt));
-  } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore" || type === "lapis_ore") {
+  } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore" || type === "lapis_ore" || type === "redstone_ore") {
     // Ores: stone host rock with a bright mineral core and scattered flecks.
     paint(new THREE.Color(colors.stone));
     for (let y = 2; y < 16; y += 3) for (let x = 2; x < 16; x += 3) {
@@ -376,6 +407,22 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     paint(new THREE.Color(0x5a3a22));
     paint(new THREE.Color(0xffe08a), 5, 0, 6, 7);
     paint(new THREE.Color(0xff7a1a), 6, 1, 4, 4);
+  } else if (type === "redstone_torch") {
+    paint(new THREE.Color(0x5a3a22));
+    paint(new THREE.Color(0xff6060), 5, 0, 6, 7);
+    paint(new THREE.Color(0xc01010), 6, 1, 4, 4);
+  } else if (type === "redstone_dust") {
+    paint(new THREE.Color(0x2a1010));
+    paint(base, 2, 6, 12, 4);
+    paint(base.clone().multiplyScalar(1.2), 4, 5, 8, 6);
+  } else if (type === "lever") {
+    paint(new THREE.Color(0x6a6e72));
+    paint(new THREE.Color(0x8a7a5a), 6, 2, 4, 10);
+    paint(new THREE.Color(0xc9b896), 5, 1, 6, 3);
+  } else if (type === "redstone_lamp") {
+    paint(new THREE.Color(0x3a3020));
+    paint(base, 2, 2, 12, 12);
+    paint(new THREE.Color(0xffd070), 5, 5, 6, 6);
   } else if (type === "wool") {
     paint(base);
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x += 4) {
@@ -457,6 +504,13 @@ class BlockRenderer {
         const variant = biomeAt(position.x, position.z, world.seed).variant;
         key = `${type}:${variant}`;
         tint = variant === "default" ? ONE_WHITE : BIOME_TINTS[variant];
+      } else if (type === "redstone_lamp") {
+        key = isLampLitAt(redstoneNet.lampLit, position) ? "redstone_lamp:lit" : "redstone_lamp:off";
+      } else if (type === "redstone_torch") {
+        key = isTorchOnAt(redstoneNet.torchOn, position) ? "redstone_torch:on" : "redstone_torch:off";
+      } else if (type === "redstone_dust") {
+        const p = wirePowerAt(redstoneNet.wirePower, position);
+        key = `redstone_dust:${p > 0 ? Math.ceil(p / 5) : 0}`;
       }
       let bucket = buckets.get(key);
       if (!bucket) {
@@ -470,15 +524,27 @@ class BlockRenderer {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
-      mesh.castShadow = type !== "leaves" && type !== "torch";
+      mesh.castShadow = type !== "leaves" && type !== "torch" && type !== "redstone_dust" && type !== "lever" && type !== "redstone_torch";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       positions.forEach((position, index) => {
-        if (type === "torch") {
+        if (type === "torch" || type === "redstone_torch") {
           matrix.compose(
             new THREE.Vector3(position.x, position.y - 0.12, position.z),
             new THREE.Quaternion(),
             new THREE.Vector3(0.22, 0.72, 0.22),
+          );
+        } else if (type === "redstone_dust") {
+          matrix.compose(
+            new THREE.Vector3(position.x, position.y - 0.42, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(0.92, 0.08, 0.92),
+          );
+        } else if (type === "lever") {
+          matrix.compose(
+            new THREE.Vector3(position.x, position.y - 0.15, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(0.35, 0.7, 0.35),
           );
         } else if (type === "bed") {
           matrix.compose(
@@ -491,6 +557,39 @@ class BlockRenderer {
         }
         mesh.setMatrixAt(index, matrix);
       });
+      // Lit lamps / torch on-off / dust power: wash material from bucket key.
+      if (type === "redstone_lamp") {
+        const lit = key.endsWith(":lit");
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          if (mat instanceof THREE.MeshLambertMaterial) {
+            mat.color.setHex(lit ? 0xffe08a : colors.redstone_lamp);
+            mat.emissive = new THREE.Color(lit ? 0xffaa44 : 0x000000);
+            mat.emissiveIntensity = lit ? 0.65 : 0;
+          }
+        });
+      }
+      if (type === "redstone_dust") {
+        const band = Number(key.split(":")[1] ?? 0);
+        const t = band / 3;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          if (mat instanceof THREE.MeshLambertMaterial) {
+            mat.color.setRGB(0.35 + 0.55 * t, 0.05 + 0.05 * t, 0.05);
+          }
+        });
+      }
+      if (type === "redstone_torch") {
+        const on = key.endsWith(":on");
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((mat) => {
+          if (mat instanceof THREE.MeshLambertMaterial) {
+            mat.color.setHex(on ? 0xff4040 : 0x4a2020);
+            mat.emissive = new THREE.Color(on ? 0xff2020 : 0x000000);
+            mat.emissiveIntensity = on ? 0.45 : 0;
+          }
+        });
+      }
       mesh.instanceMatrix.needsUpdate = true;
       mesh.userData.positions = positions;
       mesh.userData.blockType = type;
@@ -720,6 +819,11 @@ const loadedSlot = loadActiveWorld();
 const saved = loadedSlot?.save;
 let activeWorldId = loadedSlot?.id;
 let world = saved ? VoxelWorld.fromSnapshot(saved.world) : new VoxelWorld(Math.floor(Math.random() * 999999));
+leverStates = createLeverStates(saved?.player.redstone?.levers);
+refreshRedstone = (): void => {
+  redstoneNet = computeRedstoneNetwork(world, leverStates);
+};
+refreshRedstone();
 const blocks = new BlockRenderer();
 
 // --- Phase-3 nether dimension state ---
@@ -1591,6 +1695,7 @@ const playerSave = (): PlayerSave => ({
   armor: snapshotArmor(armor),
   enchanting: snapshotEnchant(enchantState),
   brewing: snapshotBrewing(potionEffects),
+  redstone: serializeRedstone(leverStates),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -1600,7 +1705,13 @@ const persist = (): void => {
   activeWorldId = createWorldSlot("世界 1", world, playerSave()).id;
   dirty = false;
 };
-const refreshWorld = (): void => { syncRenderedChunks(true); seedText.textContent = `WORLD SEED · ${world.seed}`; renderVillageState(); dirty = true; };
+const refreshWorld = (): void => {
+  refreshRedstone();
+  syncRenderedChunks(true);
+  seedText.textContent = `WORLD SEED · ${world.seed}`;
+  renderVillageState();
+  dirty = true;
+};
 
 const findTarget = (): void => {
   raycaster.setFromCamera(center, camera);
@@ -1734,9 +1845,14 @@ const edit = (place: boolean): void => {
           const count = lapisDropCount(world.seed, pos.x, pos.y, pos.z);
           inventory.lapis_lazuli += count;
           status.textContent = `获得青金石 ×${count}`;
+        } else if (removed === "redstone_ore") {
+          const count = redstoneDropCount(world.seed, pos.x, pos.y, pos.z);
+          inventory.redstone_dust += count;
+          status.textContent = `获得红石粉 ×${count}`;
         } else {
           inventory[removed] += 1;
         }
+        if (removed === "lever") clearLeverAt(leverStates, pos);
         if (removed === "leaves" && appleDropFromLeaves(world.seed, pos.x, pos.y, pos.z)) {
           inventory.apple += 1;
           status.textContent = "树叶掉落了苹果";
@@ -1784,6 +1900,30 @@ const edit = (place: boolean): void => {
       }
       world.set(position, "torch");
       inventory.torch -= 1;
+      soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
+    } else if (type === "redstone_dust") {
+      if (!canPlaceRedstoneDustAt(world, position)) {
+        status.textContent = "红石粉需要放在坚实方块上方";
+        return;
+      }
+      world.set(position, "redstone_dust");
+      inventory.redstone_dust -= 1;
+      soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
+    } else if (type === "lever" || type === "redstone_torch") {
+      if (!canPlaceRedstoneDeviceAt(world, position, target.position)) {
+        status.textContent = `${labels[type]}需要附着在坚实方块上`;
+        return;
+      }
+      world.set(position, type);
+      inventory[type] -= 1;
+      soundscape.play("place");
+      room?.sendEdit({ action: "place", position, type });
+    } else if (type === "redstone_lamp") {
+      if (!canPlaceRedstoneLampAt(world, position)) return;
+      world.set(position, "redstone_lamp");
+      inventory.redstone_lamp -= 1;
       soundscape.play("place");
       room?.sendEdit({ action: "place", position, type });
     } else {
@@ -1897,6 +2037,8 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   armor = createArmorState(slot.save.player.armor);
   enchantState = createEnchantSaveState(slot.save.player.enchanting);
   potionEffects = createEffects(slot.save.player.brewing);
+  leverStates = createLeverStates(slot.save.player.redstone?.levers);
+  refreshRedstone();
   poisonAcc.value = 0;
   const restoredTool = findGear(enchantState.gear, enchantState.equippedToolUid);
   if (restoredTool) stations.equippedTool = restoredTool.item as ExtraItem;
@@ -2093,6 +2235,15 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         status.textContent = "一觉睡到天亮 · 已设置重生点";
         renderHealth();
         dirty = true;
+        persist();
+        return;
+      }
+      if (aimed === "lever") {
+        const on = toggleLeverAt(world, leverStates, target.position);
+        if (on === undefined) return;
+        refreshWorld();
+        status.textContent = on ? "拉杆已打开 · 红石供电" : "拉杆已关闭";
+        soundscape.play("place");
         persist();
         return;
       }

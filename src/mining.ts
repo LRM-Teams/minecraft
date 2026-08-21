@@ -18,6 +18,7 @@ const DURATIONS: Record<BlockType, number> = {
   gold_ore: 1.8,
   diamond_ore: 2.2,
   lapis_ore: 1.6,
+  redstone_ore: 1.55,
   obsidian: 8,
   crafting_table: 0.65,
   furnace: 0.95,
@@ -27,6 +28,10 @@ const DURATIONS: Record<BlockType, number> = {
   torch: 0.05,
   wool: 0.35,
   bed: 0.4,
+  redstone_dust: 0.05,
+  lever: 0.15,
+  redstone_torch: 0.05,
+  redstone_lamp: 0.45,
 };
 
 const PICKAXE_BLOCKS = new Set<BlockType>([
@@ -38,10 +43,12 @@ const PICKAXE_BLOCKS = new Set<BlockType>([
   "gold_ore",
   "diamond_ore",
   "lapis_ore",
+  "redstone_ore",
   "obsidian",
   "furnace",
   "enchanting_table",
   "brewing_stand",
+  "redstone_lamp",
 ]);
 const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "bookshelf", "leaves", "bed"]);
 const SHOVEL_BLOCKS = new Set<BlockType>(["grass", "dirt", "sand"]);

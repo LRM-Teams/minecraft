@@ -1,10 +1,10 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed", "redstone_dust", "lever", "redstone_torch", "redstone_lamp"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
-/** Blocks that do not occlude neighbours or block movement (torch is a thin fixture). */
-export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch"]);
+/** Blocks that do not occlude neighbours or block movement (torch / dust / lever fixtures). */
+export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch", "redstone_dust", "lever", "redstone_torch"]);
 export const CHUNK_SIZE = 16;
 
 export type BlockPosition = { x: number; y: number; z: number };
@@ -219,6 +219,8 @@ export class VoxelWorld {
       if (depth <= 2 && roll < 0.012) return "diamond_ore";
       // lapis prefers mid-deep stone (vanilla y-ish band)
       if (depth <= 5 && roll < 0.035) return "lapis_ore";
+      // redstone ore: mid band, similar frequency to lapis
+      if (depth <= 6 && roll < 0.04) return "redstone_ore";
       if (depth <= 3 && roll < 0.02) return "obsidian";
       if (depth <= 4 && roll < 0.05) return "gold_ore";
       if (depth <= 6 && roll < 0.11) return "iron_ore";

@@ -243,6 +243,32 @@ export const RECIPES: readonly Recipe[] = [
     ],
     result: { item: "glass_bottle", count: 3 },
   },
+  // Vanilla redstone torch: dust above stick.
+  {
+    id: "redstone_torch",
+    width: 1,
+    pattern: [cell("redstone_dust"), cell("stick")],
+    result: { item: "redstone_torch", count: 1 },
+  },
+  // Vanilla lever: stick above cobble/stone.
+  {
+    id: "lever",
+    width: 1,
+    pattern: [cell("stick"), cell("stone")],
+    result: { item: "lever", count: 1 },
+  },
+  // Vanilla redstone lamp uses glowstone; glass stands in as the luminous core
+  // until nether glowstone can enter the overworld bag.
+  {
+    id: "redstone_lamp",
+    width: 3,
+    pattern: [
+      cell(null), cell("redstone_dust"), cell(null),
+      cell("redstone_dust"), cell("glass"), cell("redstone_dust"),
+      cell(null), cell("redstone_dust"), cell(null),
+    ],
+    result: { item: "redstone_lamp", count: 1 },
+  },
   // Vanilla sugar: one sugar cane (shapeless).
   {
     id: "sugar",
