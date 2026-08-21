@@ -366,7 +366,7 @@ const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
 
 type BlockFace = "side" | "top" | "bottom";
 const textureCache = new Map<string, THREE.Texture>();
-/** Wiki / catalog icons for in-world block faces (restricted = preview-only bucket). */
+/** Distributable catalog icons for in-world block faces (CC0 atlas / singles). */
 const wikiBlockMaps = new Map<BlockType, THREE.Texture>();
 const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
 
@@ -1504,8 +1504,8 @@ const renderHotbar = (): void => {
 };
 renderHotbar();
 
-/** Preview-only: load wiki-restricted icons onto block faces (stay out of cache/distributable). */
-const beginWikiBlockMaps = (): void => {
+/** Load ship-safe distributable icons onto block faces (no restricted / wiki bytes). */
+const beginDistributableBlockMaps = (): void => {
   const loader = new THREE.TextureLoader();
   let pending = 0;
   let settled = 0;
@@ -1534,7 +1534,7 @@ const beginWikiBlockMaps = (): void => {
     );
   }
 };
-beginWikiBlockMaps();
+beginDistributableBlockMaps();
 
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 
