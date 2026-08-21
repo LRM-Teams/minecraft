@@ -2,7 +2,9 @@
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
 canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
-#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 1px 2px 0 #182029; }
+#hud { position: fixed; inset: 0; z-index: 1; pointer-events: none; text-shadow: 1px 2px 0 #182029; }
+/* Station UIs live inside #hud; raise the whole HUD above #start-screen while open. */
+#hud.station-active { z-index: 5; }
 #brand { position: absolute; top: 20px; left: 24px; font-weight: 900; font-size: 17px; letter-spacing: 2px; }
 #brand span { color: #f5d56f; }
 #seed { position: absolute; top: 45px; left: 24px; color: #e9f1d3; font-size: 11px; opacity: .85; }
@@ -43,7 +45,8 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .bed { background: linear-gradient(180deg, #c43c3c 0 45%, #8b5a2b 45% 100%); }
 .station-panel { position: absolute; inset: 10% 8%; z-index: 5; pointer-events: auto; padding: 14px; border: 2px solid #a99d76; background: rgba(12, 18, 20, .94); color: #dcecf0; overflow: auto; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
 .station-panel.hidden { display: none; }
-.station-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #f1dda3; }
+.station-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; color: #f1dda3; }
+.craft-cursor { flex: 1; font-size: 10px; color: #b7c9c3; text-align: right; }
 .station-head button, .station-bag, .station-cell, .craft-result { pointer-events: auto; width: auto; padding: 6px 8px; border: 1px solid #7e9ca1; background: #243238; color: #edf7ff; font: inherit; font-size: 11px; box-shadow: none; cursor: pointer; }
 .station-body, .furnace-body { display: grid; grid-template-columns: auto auto 1fr 1fr 1.1fr; gap: 12px; align-items: start; }
 .station-body.armor-layout { grid-template-columns: auto auto 1fr 1fr 1fr 1.1fr; }
