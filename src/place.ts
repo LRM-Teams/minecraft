@@ -18,6 +18,7 @@ export const BLOCK_INTERACT_TYPES = [
   "bed",
   "lever",
   "oak_door",
+  "chest",
 ] as const;
 
 export type BlockInteractType = (typeof BLOCK_INTERACT_TYPES)[number];

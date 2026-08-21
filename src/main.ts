@@ -133,26 +133,31 @@ import {
   activeBrewingStand,
   activeFurnace,
   closeBrew,
+  closeChest,
   closeCraft,
   closeEnchant,
   closeFurnace,
   createStations,
   handleBrewClick,
+  handleChestClick,
   handleCraftClick,
   handleEnchantClick,
   handleFurnaceClick,
   openBrewAt,
+  openChestAt,
   openEnchantAt,
   openFurnaceAt,
   openInventoryCraft,
   openTableCraft,
   renderBrewPanelHtml,
+  renderChestPanelHtml,
   renderCraftPanelHtml,
   renderEnchantPanelHtml,
   renderFurnacePanelHtml,
   tickAllBrewingStands,
   tickAllFurnaces,
 } from "./stations";
+import { drainChestContents, restoreChests, snapshotChests, chestKey } from "./chests";
 import {
   createPortalLink,
   defaultPortalGeometry,
@@ -212,6 +217,7 @@ app.innerHTML = `
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
     <div id="furnace-panel" class="station-panel hidden"></div>
+    <div id="chest-panel" class="station-panel hidden"></div>
     <div id="enchant-panel" class="station-panel hidden"></div>
     <div id="brew-panel" class="station-panel hidden"></div>
     <aside id="codex" class="hidden">
@@ -363,6 +369,7 @@ const colors: Record<BlockType, number> = {
   obsidian: 0x2b2333,
   crafting_table: 0xb8874c,
   furnace: 0x6a6e72,
+  chest: 0x8b6914,
   enchanting_table: 0x5a2a6e,
   bookshelf: 0x8b5a2b,
   brewing_stand: 0x6a5a48,
@@ -377,7 +384,7 @@ const colors: Record<BlockType, number> = {
   ladder: 0x9a6a3a,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", redstone_ore: "红石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床", redstone_dust: "红石粉", lever: "拉杆", redstone_torch: "红石火把", redstone_lamp: "红石灯", oak_door: "木门", ladder: "梯子",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", redstone_ore: "红石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", chest: "箱子", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床", redstone_dust: "红石粉", lever: "拉杆", redstone_torch: "红石火把", redstone_lamp: "红石灯", oak_door: "木门", ladder: "梯子",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -1531,8 +1538,10 @@ const consumeHeldOne = (): boolean => {
   return true;
 };
 const stations = createStations();
+stations.chests = restoreChests(saved?.player.chests);
 const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
+const chestPanel = document.querySelector<HTMLDivElement>("#chest-panel")!;
 const enchantPanel = document.querySelector<HTMLDivElement>("#enchant-panel")!;
 const brewPanel = document.querySelector<HTMLDivElement>("#brew-panel")!;
 const effectsText = document.querySelector<HTMLDivElement>("#effects")!;
@@ -1739,7 +1748,7 @@ const updateDropsLoop = (delta: number): void => {
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 
 const anyStationOpen = (): boolean =>
-  stations.craftOpen || stations.furnaceOpen || stations.enchantOpen || stations.brewOpen;
+  stations.craftOpen || stations.furnaceOpen || stations.enchantOpen || stations.brewOpen || stations.chestOpen;
 
 /** Keep pause/start overlay from covering station panels (z-index + visibility). */
 const syncStartScreenForUi = (): void => {
@@ -1765,6 +1774,7 @@ const refreshStationsUi = (): void => {
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
   enchantPanel.classList.toggle("hidden", !stations.enchantOpen);
   brewPanel.classList.toggle("hidden", !stations.brewOpen);
+  chestPanel.classList.toggle("hidden", !stations.chestOpen);
   if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor, playerSlots);
   if (stations.furnaceOpen) {
     const furnace = activeFurnace(stations);
@@ -1776,6 +1786,9 @@ const refreshStationsUi = (): void => {
   if (stations.brewOpen) {
     const stand = activeBrewingStand(stations);
     if (stand) brewPanel.innerHTML = renderBrewPanelHtml(stand, inventory);
+  }
+  if (stations.chestOpen) {
+    chestPanel.innerHTML = renderChestPanelHtml(stations, playerSlots);
   }
   syncStartScreenForUi();
 };
@@ -1974,6 +1987,7 @@ const playerSave = (): PlayerSave => ({
   enchanting: snapshotEnchant(enchantState),
   brewing: snapshotBrewing(potionEffects),
   redstone: serializeRedstone(leverStates),
+  chests: snapshotChests(stations.chests),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -2144,6 +2158,13 @@ const edit = (place: boolean): void => {
           inventory[removed] += 1;
         }
         if (removed === "lever") clearLeverAt(leverStates, pos);
+        if (removed === "chest") {
+          const key = chestKey(pos.x, pos.y, pos.z);
+          if (stations.chestOpen && stations.chestKey === key) closeChest(stations, inventory);
+          for (const drop of drainChestContents(stations.chests, key)) {
+            inventory[drop.item] = (inventory[drop.item] ?? 0) + drop.count;
+          }
+        }
         if (removed === "leaves" && appleDropFromLeaves(world.seed, pos.x, pos.y, pos.z)) {
           inventory.apple += 1;
           status.textContent = "树叶掉落了苹果";
@@ -2297,6 +2318,8 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   enchantState = createEnchantSaveState(slot.save.player.enchanting);
   potionEffects = createEffects(slot.save.player.brewing);
   leverStates = createLeverStates(slot.save.player.redstone?.levers);
+  stations.chests = restoreChests(slot.save.player.chests);
+  closeChest(stations, inventory);
   refreshRedstone();
   poisonAcc.value = 0;
   const restoredTool = findGear(enchantState.gear, enchantState.equippedToolUid);
@@ -2459,6 +2482,14 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         status.textContent = "熔炉已打开";
         return;
       }
+      if (aimed === "chest") {
+        const key = chestKey(target.position.x, target.position.y, target.position.z);
+        openChestAt(stations, inventory, key);
+        releasePointerForUi();
+        refreshStationsUi();
+        status.textContent = "箱子已打开";
+        return;
+      }
       if (aimed === "enchanting_table") {
         const key = `${target.position.x},${target.position.y},${target.position.z}`;
         const power = countBookshelfPower(
@@ -2524,7 +2555,7 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         persist();
         return;
       }
-      } else if (aimed === "crafting_table" || aimed === "furnace" || aimed === "enchanting_table" || aimed === "brewing_stand") {
+      } else if (aimed === "crafting_table" || aimed === "furnace" || aimed === "enchanting_table" || aimed === "brewing_stand" || aimed === "chest") {
         // Still open stations even while holding blocks (vanilla: use without placing into the block).
         if (aimed === "crafting_table") {
           openTableCraft(stations, inventory);
@@ -2539,6 +2570,14 @@ renderer.domElement.addEventListener("mousedown", (event) => {
           releasePointerForUi();
           refreshStationsUi();
           status.textContent = "熔炉已打开";
+          return;
+        }
+        if (aimed === "chest") {
+          const key = chestKey(target.position.x, target.position.y, target.position.z);
+          openChestAt(stations, inventory, key);
+          releasePointerForUi();
+          refreshStationsUi();
+          status.textContent = "箱子已打开";
           return;
         }
         if (aimed === "enchanting_table") {
@@ -2679,6 +2718,7 @@ document.addEventListener("keydown", (event) => {
     closeFurnace(stations);
     closeEnchant(stations, inventory);
     closeBrew(stations, inventory);
+    closeChest(stations, inventory);
     refreshStationsUi();
     renderHotbar();
     resumePlayAfterUi();
@@ -3402,6 +3442,22 @@ furnacePanel.addEventListener("click", (event) => {
   dirty = true;
   persist();
   if (!anyStationOpen()) resumePlayAfterUi();
+});
+
+const applyChestPanelClick = (event: MouseEvent, button: "left" | "right"): void => {
+  const target = event.target as HTMLElement;
+  if (!handleChestClick(stations, inventory, playerSlots, target, button)) return;
+  soundscape.play("craft");
+  refreshStationsUi();
+  renderHotbar();
+  dirty = true;
+  persist();
+  if (!anyStationOpen()) resumePlayAfterUi();
+};
+chestPanel.addEventListener("click", (event) => applyChestPanelClick(event, "left"));
+chestPanel.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  applyChestPanelClick(event, "right");
 });
 
 enchantPanel.addEventListener("click", (event) => {

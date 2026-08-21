@@ -7,6 +7,7 @@ import type { EnchantSave } from "./enchanting";
 import type { BrewingSave } from "./brewing";
 import type { RedstoneSave } from "./redstone";
 import type { DroppedItemSave } from "./drops";
+import type { ChestSave } from "./chests";
 
 const LEGACY_SAVE_KEY = "voxel-atelier-save-v1";
 const SLOT_SAVE_KEY = "voxel-atelier-worlds-v1";
@@ -47,6 +48,8 @@ export type PlayerSave = {
   brewing?: BrewingSave;
   /** Optional lever ON map for redstone circuits (Phase-4). */
   redstone?: RedstoneSave;
+  /** World chest inventories keyed by `x,y,z`. */
+  chests?: ChestSave;
 };
 export type SaveFile = { world: WorldSnapshot; player: PlayerSave };
 export type WorldSlot = { id: string; name: string; updatedAt: number; save: SaveFile };

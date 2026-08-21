@@ -1,4 +1,9 @@
 import {
+  CHEST_SIZE,
+  ensureChest,
+  type ChestSlots,
+} from "./chests";
+import {
   asStack,
   clickCraftBag,
   clickCraftCell,
@@ -96,6 +101,9 @@ export type StationController = {
   brewOpen: boolean;
   brewKey: string | null;
   brewingStands: Map<string, BrewingStandState>;
+  chestOpen: boolean;
+  chestKey: string | null;
+  chests: Map<string, ChestSlots>;
 };
 
 export const createStations = (): StationController => ({
@@ -114,6 +122,9 @@ export const createStations = (): StationController => ({
   brewOpen: false,
   brewKey: null,
   brewingStands: new Map(),
+  chestOpen: false,
+  chestKey: null,
+  chests: new Map(),
 });
 
 export const openInventoryCraft = (stations: StationController, inventory: Inventory): void => {
@@ -124,6 +135,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
   closeFurnace(stations);
   closeEnchant(stations, inventory);
   closeBrew(stations, inventory);
+  closeChest(stations, inventory);
   stations.craftMode = "inventory";
   stations.craftGrid = emptyGrid(2);
   stations.craftCursor = null;
@@ -134,6 +146,7 @@ export const openTableCraft = (stations: StationController, inventory: Inventory
   closeFurnace(stations);
   closeEnchant(stations, inventory);
   closeBrew(stations, inventory);
+  closeChest(stations, inventory);
   if (stations.craftOpen) {
     refundGrid(inventory, stations.craftGrid);
     stations.craftCursor = refundCursor(inventory, stations.craftCursor);
@@ -155,6 +168,7 @@ export const openFurnaceAt = (stations: StationController, inventory: Inventory,
   closeCraft(stations, inventory);
   closeEnchant(stations, inventory);
   closeBrew(stations, inventory);
+  closeChest(stations, inventory);
   if (!stations.furnaces.has(key)) stations.furnaces.set(key, createFurnaceState());
   stations.furnaceKey = key;
   stations.furnaceOpen = true;
@@ -175,6 +189,7 @@ export const openEnchantAt = (
   closeCraft(stations, inventory);
   closeFurnace(stations);
   closeBrew(stations, inventory);
+  closeChest(stations, inventory);
   if (stations.enchantOpen && stations.enchantKey !== key) {
     closeEnchant(stations, inventory);
   }
@@ -200,6 +215,7 @@ export const openBrewAt = (stations: StationController, inventory: Inventory, ke
   closeCraft(stations, inventory);
   closeFurnace(stations);
   closeEnchant(stations, inventory);
+  closeChest(stations, inventory);
   if (stations.brewOpen && stations.brewKey !== key) {
     closeBrew(stations, inventory);
   }
@@ -214,6 +230,29 @@ export const closeBrew = (stations: StationController, inventory: Inventory): vo
   stations.brewOpen = false;
   stations.brewKey = null;
 };
+
+export const openChestAt = (stations: StationController, inventory: Inventory, key: string): void => {
+  closeCraft(stations, inventory);
+  closeFurnace(stations);
+  closeEnchant(stations, inventory);
+  closeBrew(stations, inventory);
+  if (stations.chestOpen && stations.chestKey !== key) {
+    closeChest(stations, inventory);
+  }
+  ensureChest(stations.chests, key);
+  stations.chestKey = key;
+  stations.chestOpen = true;
+};
+
+export const closeChest = (stations: StationController, inventory: Inventory): void => {
+  if (!stations.chestOpen) return;
+  stations.craftCursor = refundCursor(inventory, stations.craftCursor);
+  stations.chestOpen = false;
+  stations.chestKey = null;
+};
+
+export const activeChest = (stations: StationController): ChestSlots | undefined =>
+  stations.chestKey ? stations.chests.get(stations.chestKey) : undefined;
 
 export const activeFurnace = (stations: StationController): FurnaceState | undefined =>
   stations.furnaceKey ? stations.furnaces.get(stations.furnaceKey) : undefined;
@@ -655,6 +694,67 @@ export const handleBrewClick = (
   const slotBtn = target.closest<HTMLElement>("[data-brew-slot]");
   if (slotBtn?.dataset.brewSlot !== undefined) {
     withdrawBottle(stand, inventory, Number(slotBtn.dataset.brewSlot) as 0 | 1 | 2);
+    return true;
+  }
+  return false;
+};
+
+const renderChestCellHtml = (slots: readonly InvSlot[], index: number): string => {
+  const stack = slots[index];
+  if (!stack) {
+    return `<button type="button" class="inv-cell empty" data-chest-slot="${index}" title="空"></button>`;
+  }
+  const title = `${ITEM_LABELS[stack.item]}${stack.count > 1 ? ` ×${stack.count}` : ""}`;
+  const src = iconFor(stack.item);
+  const face = src
+    ? `<img class="inv-icon" src="${src}" alt="${title}" draggable="false" />`
+    : `<span class="inv-fallback">${ITEM_LABELS[stack.item].slice(0, 2)}</span>`;
+  const count = stack.count > 1 ? `<small>${stack.count}</small>` : "";
+  return `<button type="button" class="inv-cell" data-chest-slot="${index}" title="${title}">${face}${count}</button>`;
+};
+
+export const renderChestPanelHtml = (
+  stations: StationController,
+  playerSlots: readonly InvSlot[],
+): string => {
+  const chest = activeChest(stations) ?? ensureChest(stations.chests, stations.chestKey ?? "0,0,0");
+  const cells = Array.from({ length: CHEST_SIZE }, (_, i) => renderChestCellHtml(chest, i)).join("");
+  const cursor = stations.craftCursor;
+  const cursorLabel = cursor
+    ? `光标 ${ITEM_LABELS[cursor.item]} ×${cursor.count}`
+    : "光标 空 · 左键取放 · 右键半组/放1";
+  return `
+    <div class="station-head"><strong>箱子 · 27 格</strong><button type="button" data-chest-close>关闭 Esc</button></div>
+    <p class="station-hint">${cursorLabel}</p>
+    <div class="chest-grid inv-grid main">${cells}</div>
+    ${renderPlayerInvGridHtml(playerSlots)}
+  `;
+};
+
+export const handleChestClick = (
+  stations: StationController,
+  inventory: Inventory,
+  playerSlots: InvSlot[],
+  target: HTMLElement,
+  button: "left" | "right",
+): boolean => {
+  if (!stations.chestOpen) return false;
+  if (target.closest("[data-chest-close]")) {
+    closeChest(stations, inventory);
+    return true;
+  }
+  const chest = activeChest(stations);
+  if (!chest) return false;
+  const chestCell = target.closest<HTMLElement>("[data-chest-slot]");
+  if (chestCell?.dataset.chestSlot !== undefined) {
+    const index = Number(chestCell.dataset.chestSlot);
+    stations.craftCursor = clickInvSlot(chest, stations.craftCursor, index, button);
+    return true;
+  }
+  const invCell = target.closest<HTMLElement>("[data-inv-slot]");
+  if (invCell?.dataset.invSlot !== undefined) {
+    const index = Number(invCell.dataset.invSlot);
+    stations.craftCursor = clickInvSlot(playerSlots, stations.craftCursor, index, button);
     return true;
   }
   return false;

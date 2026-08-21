@@ -157,6 +157,16 @@ export const RECIPES: readonly Recipe[] = [
     result: { item: "furnace", count: 1 },
   },
   {
+    id: "chest",
+    width: 3,
+    pattern: [
+      cell("planks"), cell("planks"), cell("planks"),
+      cell("planks"), null, cell("planks"),
+      cell("planks"), cell("planks"), cell("planks"),
+    ],
+    result: { item: "chest", count: 1 },
+  },
+  {
     id: "bricks",
     width: 2,
     pattern: [cell("stone"), cell("stone"), cell("stone"), cell("stone")],
