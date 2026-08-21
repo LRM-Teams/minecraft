@@ -17,6 +17,41 @@ export type Recipe = {
 
 const cell = (value: CraftCell): CraftCell => value;
 
+/** Vanilla armor shapes for leather / iron (and any future material). */
+const armorSet = (tier: "leather" | "iron", material: ItemType): Recipe[] => {
+  const helmet = `${tier}_helmet` as ExtraItem;
+  const chest = `${tier}_chestplate` as ExtraItem;
+  const legs = `${tier}_leggings` as ExtraItem;
+  const boots = `${tier}_boots` as ExtraItem;
+  const M = material;
+  return [
+    {
+      id: helmet,
+      width: 3,
+      pattern: [M, M, M, M, null, M],
+      result: { item: helmet, count: 1 },
+    },
+    {
+      id: chest,
+      width: 3,
+      pattern: [M, null, M, M, M, M, M, M, M],
+      result: { item: chest, count: 1 },
+    },
+    {
+      id: legs,
+      width: 3,
+      pattern: [M, M, M, M, null, M, M, null, M],
+      result: { item: legs, count: 1 },
+    },
+    {
+      id: boots,
+      width: 3,
+      pattern: [M, null, M, M, null, M],
+      result: { item: boots, count: 1 },
+    },
+  ];
+};
+
 const toolSet = (tier: "wooden" | "stone" | "iron" | "gold" | "diamond", material: ItemType): Recipe[] => {
   const pick = `${tier}_pickaxe` as ExtraItem;
   const axe = `${tier}_axe` as ExtraItem;
@@ -147,6 +182,8 @@ export const RECIPES: readonly Recipe[] = [
   ...toolSet("iron", "iron_ingot"),
   ...toolSet("gold", "gold_ingot"),
   ...toolSet("diamond", "diamond"),
+  ...armorSet("leather", "leather"),
+  ...armorSet("iron", "iron_ingot"),
 ];
 
 export const ALL_RECIPES: readonly Recipe[] = RECIPES;
@@ -312,4 +349,29 @@ export const recipeNeedsTable = (recipe: Recipe): boolean => {
   return recipe.width > 2 || height > 2;
 };
 
-export const isToolItem = (item: ItemType): boolean => isExtraItem(item) && !["stick", "coal", "charcoal", "iron_ingot", "gold_ingot", "copper_ingot", "diamond", "wheat", "apple", "bread", "raw_beef", "cooked_beef"].includes(item);
+const NON_TOOL_EXTRAS = new Set([
+  "stick",
+  "coal",
+  "charcoal",
+  "iron_ingot",
+  "gold_ingot",
+  "copper_ingot",
+  "diamond",
+  "wheat",
+  "apple",
+  "bread",
+  "raw_beef",
+  "cooked_beef",
+  "leather",
+  "leather_helmet",
+  "leather_chestplate",
+  "leather_leggings",
+  "leather_boots",
+  "iron_helmet",
+  "iron_chestplate",
+  "iron_leggings",
+  "iron_boots",
+]);
+
+export const isToolItem = (item: ItemType): boolean =>
+  isExtraItem(item) && !NON_TOOL_EXTRAS.has(item);

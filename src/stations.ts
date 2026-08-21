@@ -11,7 +11,7 @@ import {
   type CraftCell,
 } from "./crafting";
 import type { Inventory } from "./inventory";
-import { ITEM_LABELS, isTool, type ExtraItem, type ItemType } from "./items";
+import { ITEM_LABELS, isArmor, isTool, type ExtraItem, type ItemType } from "./items";
 import {
   createFurnaceState,
   depositFurnace,
@@ -19,6 +19,15 @@ import {
   withdrawFurnace,
   type FurnaceState,
 } from "./smelting";
+import {
+  ARMOR_SLOTS,
+  SLOT_LABELS,
+  isArmorPiece,
+  toggleArmor,
+  totalArmorPoints,
+  type ArmorPiece,
+  type ArmorState,
+} from "./armor";
 
 export type CraftMode = "inventory" | "table";
 
@@ -90,7 +99,11 @@ export const tickAllFurnaces = (stations: StationController, delta: number): boo
   return changed;
 };
 
-export const renderCraftPanelHtml = (stations: StationController, inventory: Inventory): string => {
+export const renderCraftPanelHtml = (
+  stations: StationController,
+  inventory: Inventory,
+  armor: ArmorState,
+): string => {
   const size = stations.craftMode === "table" ? 3 : 2;
   const title = stations.craftMode === "table" ? "工作台 3×3" : "背包合成 2×2";
   const recipe = matchRecipe(stations.craftGrid);
@@ -113,13 +126,29 @@ export const renderCraftPanelHtml = (stations: StationController, inventory: Inv
     `<button type="button" class="station-bag ${stations.equippedTool === item ? "equipped" : ""}" data-equip-tool="${item}">${ITEM_LABELS[item]} ${stations.equippedTool === item ? "✓" : ""}</button>`,
   ).join("") || "<p class='station-empty'>尚未合成工具</p>";
 
+  const worn = ARMOR_SLOTS.map((slot) => {
+    const piece = armor[slot];
+    const label = piece ? ITEM_LABELS[piece] : "空";
+    return `<button type="button" class="station-bag ${piece ? "equipped" : ""}" data-unequip-armor="${slot}">${SLOT_LABELS[slot]} · ${label}</button>`;
+  }).join("");
+  const bagArmor = [
+    ...ownedItems(inventory).filter(isArmor),
+    ...ARMOR_SLOTS.map((slot) => armor[slot]).filter((piece): piece is ArmorPiece => Boolean(piece)),
+  ];
+  const uniqueArmor = [...new Set(bagArmor)];
+  const armorBtns = uniqueArmor.map((item) => {
+    const equipped = ARMOR_SLOTS.some((slot) => armor[slot] === item);
+    return `<button type="button" class="station-bag ${equipped ? "equipped" : ""}" data-equip-armor="${item}">${ITEM_LABELS[item]} ${equipped ? "✓" : ""}</button>`;
+  }).join("") || "<p class='station-empty'>尚未合成护甲</p>";
+
   return `
     <div class="station-head"><strong>${title}</strong><button type="button" data-craft-close>关闭 Esc</button></div>
-    <div class="station-body">
+    <div class="station-body armor-layout">
       <div class="craft-grid size-${size}">${cells}</div>
       <button type="button" class="craft-result" data-craft-take>${resultLabel}</button>
       <div class="station-col"><h4>背包</h4><div class="station-bag-list">${bag}</div></div>
       <div class="station-col"><h4>手持工具</h4><div class="station-bag-list">${tools}</div></div>
+      <div class="station-col"><h4>护甲 ${totalArmorPoints(armor)}/20</h4><div class="station-bag-list">${worn}${armorBtns}</div></div>
       <div class="station-col recipe-book"><h4>配方</h4>${book}</div>
     </div>
   `;
@@ -159,6 +188,7 @@ export const handleCraftClick = (
   stations: StationController,
   inventory: Inventory,
   target: HTMLElement,
+  armor?: ArmorState,
 ): boolean => {
   if (target.closest("[data-craft-close]")) {
     closeCraft(stations, inventory);
@@ -186,6 +216,25 @@ export const handleCraftClick = (
     const tool = equip.dataset.equipTool as ExtraItem;
     stations.equippedTool = stations.equippedTool === tool ? null : tool;
     return true;
+  }
+  if (armor) {
+    const unequip = target.closest<HTMLElement>("[data-unequip-armor]");
+    if (unequip?.dataset.unequipArmor) {
+      const slot = unequip.dataset.unequipArmor as keyof ArmorState;
+      if (armor[slot]) {
+        inventory[armor[slot]!] = (inventory[armor[slot]!] ?? 0) + 1;
+        armor[slot] = null;
+      }
+      return true;
+    }
+    const wear = target.closest<HTMLElement>("[data-equip-armor]");
+    if (wear?.dataset.equipArmor) {
+      const piece = wear.dataset.equipArmor;
+      if (isArmorPiece(piece)) {
+        toggleArmor(armor, inventory, piece);
+        return true;
+      }
+    }
   }
   return false;
 };

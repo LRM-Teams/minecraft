@@ -39,6 +39,14 @@ import {
   type FoodId,
   type HungerState,
 } from "./hunger";
+import {
+  createArmorState,
+  formatArmorBar,
+  mitigateDamage,
+  snapshotArmor,
+  totalArmorPoints,
+  type ArmorState,
+} from "./armor";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
 import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
 import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
@@ -86,6 +94,7 @@ app.innerHTML = `
     <div id="world-time"></div>
     <div id="health"></div>
     <div id="hunger"></div>
+    <div id="armor"></div>
     <div id="audio-state"></div>
     <div id="network-state"></div>
     <div id="village-state"></div>
@@ -111,6 +120,7 @@ app.innerHTML = `
       <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
       <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食</div>
+      <div class="recipe">护甲：皮革/铁锭工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
       <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/床/村民交互。羊毛可在村庄屋内取得。</p>
     </aside>
   </div>
@@ -1159,6 +1169,7 @@ const seedText = document.querySelector<HTMLDivElement>("#seed")!;
 const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const hungerText = document.querySelector<HTMLDivElement>("#hunger")!;
+const armorText = document.querySelector<HTMLDivElement>("#armor")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
@@ -1184,6 +1195,7 @@ const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
 let hunger: HungerState = createHungerState(saved?.player.hunger);
+let armor: ArmorState = createArmorState(saved?.player.armor);
 const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
@@ -1290,7 +1302,7 @@ renderHotbar();
 const refreshStationsUi = (): void => {
   craftPanel.classList.toggle("hidden", !stations.craftOpen);
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
-  if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory);
+  if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor);
   if (stations.furnaceOpen) {
     const furnace = activeFurnace(stations);
     if (furnace) furnacePanel.innerHTML = renderFurnacePanelHtml(furnace, inventory);
@@ -1312,6 +1324,20 @@ const renderHunger = (): void => {
   hungerText.textContent = `饥饿 ${formatHungerBar(hunger.foodLevel)} ${hunger.foodLevel}/${MAX_FOOD_LEVEL}`;
 };
 renderHunger();
+
+const renderArmor = (): void => {
+  const points = totalArmorPoints(armor);
+  armorText.textContent = `护甲 ${formatArmorBar(points)} ${points}/20`;
+};
+renderArmor();
+
+/** Mitigate then subtract HP. Returns damage actually dealt (0 if fully blocked). */
+const applyIncomingDamage = (rawDamage: number): number => {
+  const dealt = mitigateDamage(armor, rawDamage);
+  if (dealt <= 0) return 0;
+  playerHealth = Math.max(0, playerHealth - dealt);
+  return dealt;
+};
 
 const tryEatFood = (): boolean => {
   const foodId = pickFoodToEat(inventory);
@@ -1442,6 +1468,7 @@ const playerSave = (): PlayerSave => ({
   spawnPoint: bedSpawn,
   dayPhaseMs: dayClock.phaseMs(),
   hunger: snapshotHunger(hunger),
+  armor: snapshotArmor(armor),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -1718,7 +1745,9 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   renderRaidState();
   playerHealth = maxPlayerHealth;
   hunger = createHungerState(slot.save.player.hunger);
+  armor = createArmorState(slot.save.player.armor);
   renderHunger();
+  renderArmor();
   syncRenderedChunks(true);
   syncDimensionState();
   seedText.textContent = `WORLD SEED · ${world.seed}`;
@@ -2087,15 +2116,20 @@ const updateMobs = (delta: number): void => {
   if (damageToPlayer > 0) {
     addExhaustion(hunger, EXHAUSTION.damage);
     renderHunger();
-    playerHealth = Math.max(0, playerHealth - damageToPlayer);
+    const dealt = applyIncomingDamage(damageToPlayer);
     if (playerHealth === 0) {
       playerHealth = maxPlayerHealth;
-      camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+      camera.position.set(...respawnPoint());
       verticalVelocity = 0;
-      status.textContent = "生命耗尽，已在起点重生";
+      status.textContent = "生命耗尽，已重生";
       soundscape.play("respawn");
+    } else if (dealt <= 0) {
+      status.textContent = `护甲挡住了 ${damageToPlayer} 点伤害`;
+      soundscape.play("hit");
     } else {
-      status.textContent = `受到 ${damageToPlayer} 点伤害`;
+      status.textContent = dealt < damageToPlayer
+        ? `受到 ${dealt} 点伤害（护甲减免 ${damageToPlayer - dealt}）`
+        : `受到 ${dealt} 点伤害`;
       soundscape.play("hurt");
     }
     renderHealth();
@@ -2234,16 +2268,20 @@ const updateWitherLoop = (delta: number): void => {
     if (boss.defeated) continue;
     const frame = updateWither(world, boss, mobs, camera.position, delta);
     if (frame.damageToPlayer > 0) {
-      playerHealth = Math.max(0, playerHealth - frame.damageToPlayer);
+      const dealt = applyIncomingDamage(frame.damageToPlayer);
       if (playerHealth === 0) {
         playerHealth = maxPlayerHealth;
-        camera.position.set(0, world.topY(0, 0) + 1.72, 8);
+        camera.position.set(...respawnPoint());
         verticalVelocity = 0;
-        status.textContent = "被凋灵骷髅击中，生命耗尽，已在起点重生";
+        status.textContent = "被凋灵骷髅击中，生命耗尽，已重生";
+      } else if (dealt <= 0) {
+        status.textContent = "护甲挡住了凋灵骷髅";
       } else {
-        status.textContent = "被凋灵骷髅击中！";
+        status.textContent = dealt < frame.damageToPlayer
+          ? `被凋灵骷髅击中 · ${dealt}（护甲减免）`
+          : "被凋灵骷髅击中！";
       }
-      soundscape.play("hurt");
+      soundscape.play(dealt <= 0 ? "hit" : "hurt");
       renderHealth();
     }
     if (frame.killed) justKilled = true;
@@ -2284,13 +2322,16 @@ const updateNetherEcology = (delta: number): void => {
     lavaTimer += delta;
     if (lavaTimer >= 0.4) {
       lavaTimer = 0;
-      playerHealth = Math.max(0, playerHealth - 1);
+      const dealt = applyIncomingDamage(1);
       if (playerHealth <= 0) {
         playerHealth = maxPlayerHealth;
         camera.position.set(...respawnPoint());
         verticalVelocity = 0;
         status.textContent = "熔岩灼烧，已于下界重生";
         soundscape.play("respawn");
+      } else if (dealt <= 0) {
+        status.textContent = "护甲挡住了熔岩灼烧";
+        soundscape.play("hit");
       } else {
         status.textContent = "熔岩灼烧！";
         soundscape.play("hurt");
@@ -2359,7 +2400,7 @@ const updateEndEcology = (delta: number): void => {
   result.summons.forEach((m) => { if (!mobs.some((exist) => exist.id === m.id)) mobs.push(m); });
   if (result.summons.length) syncMobMeshes();
   if (result.damageToPlayer > 0) {
-    playerHealth = Math.max(0, playerHealth - result.damageToPlayer);
+    const dealt = applyIncomingDamage(result.damageToPlayer);
     if (playerHealth === 0) {
       playerHealth = maxPlayerHealth;
       const s = endSpawn();
@@ -2367,8 +2408,13 @@ const updateEndEcology = (delta: number): void => {
       verticalVelocity = 0;
       status.textContent = "生命耗尽，已在末地平台重生";
       soundscape.play("respawn");
+    } else if (dealt <= 0) {
+      status.textContent = "护甲挡住了末影龙冲撞";
+      soundscape.play("hit");
     } else {
-      status.textContent = `末影龙冲撞 · 受到 ${result.damageToPlayer} 点伤害`;
+      status.textContent = dealt < result.damageToPlayer
+        ? `末影龙冲撞 · 受到 ${dealt} 点伤害（护甲减免）`
+        : `末影龙冲撞 · 受到 ${dealt} 点伤害`;
       soundscape.play("hurt");
     }
     renderHealth();
@@ -2547,10 +2593,11 @@ requestAnimationFrame(frame);
 
 craftPanel.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
-  if (!handleCraftClick(stations, inventory, target)) return;
+  if (!handleCraftClick(stations, inventory, target, armor)) return;
   soundscape.play("craft");
   refreshStationsUi();
   renderHotbar();
+  renderArmor();
   dirty = true;
   persist();
 });

@@ -9,15 +9,16 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 #world-time { position: absolute; top: 64px; left: 24px; color: #fff2b5; font-size: 11px; opacity: .9; }
 #health { position: absolute; top: 83px; left: 24px; color: #ff7770; font-size: 13px; letter-spacing: 1px; }
 #hunger { position: absolute; top: 102px; left: 24px; color: #f0c070; font-size: 12px; letter-spacing: 0.5px; }
-#audio-state { position: absolute; top: 122px; left: 24px; color: #cbd7d0; font-size: 10px; opacity: .82; }
-#network-state { position: absolute; top: 139px; left: 24px; color: #a8d7e9; font-size: 10px; opacity: .9; }
-#village-state { position: absolute; top: 156px; left: 24px; color: #e9cf9a; font-size: 10px; opacity: .9; }
-#guardian-state { position: absolute; top: 173px; left: 24px; color: #c5ddae; font-size: 10px; opacity: .9; }
-#raid-state { position: absolute; top: 190px; left: 24px; color: #e9a99a; font-size: 10px; opacity: .9; }
-#biome-state { position: absolute; top: 207px; left: 24px; color: #d9c2ff; font-size: 10px; opacity: .9; }
-#dimension-state { position: absolute; top: 224px; left: 24px; color: #ff9f7a; font-size: 10px; opacity: .95; letter-spacing: .04em; }
-#wither-state { position: absolute; top: 246px; left: 24px; width: 170px; color: #d7b7ff; font-size: 10px; opacity: .95; letter-spacing: .03em; }
-#wither-star { position: absolute; top: 280px; left: 24px; color: #ffd76b; font-size: 10px; opacity: .95; letter-spacing: .03em; }
+#armor { position: absolute; top: 121px; left: 24px; color: #b8d4e8; font-size: 12px; letter-spacing: 0.5px; }
+#audio-state { position: absolute; top: 141px; left: 24px; color: #cbd7d0; font-size: 10px; opacity: .82; }
+#network-state { position: absolute; top: 158px; left: 24px; color: #a8d7e9; font-size: 10px; opacity: .9; }
+#village-state { position: absolute; top: 175px; left: 24px; color: #e9cf9a; font-size: 10px; opacity: .9; }
+#guardian-state { position: absolute; top: 192px; left: 24px; color: #c5ddae; font-size: 10px; opacity: .9; }
+#raid-state { position: absolute; top: 209px; left: 24px; color: #e9a99a; font-size: 10px; opacity: .9; }
+#biome-state { position: absolute; top: 226px; left: 24px; color: #d9c2ff; font-size: 10px; opacity: .9; }
+#dimension-state { position: absolute; top: 243px; left: 24px; color: #ff9f7a; font-size: 10px; opacity: .95; letter-spacing: .04em; }
+#wither-state { position: absolute; top: 265px; left: 24px; width: 170px; color: #d7b7ff; font-size: 10px; opacity: .95; letter-spacing: .03em; }
+#wither-star { position: absolute; top: 299px; left: 24px; color: #ffd76b; font-size: 10px; opacity: .95; letter-spacing: .03em; }
 .wither-bar { width: 100%; height: 8px; border: 2px solid #2c3339; background: #1a101c; margin-bottom: 3px; border-radius: 2px; }
 .wither-fill { height: 100%; background: linear-gradient(90deg, #7a1fa0, #c12bc8); transition: width .12s linear; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: 28px; font-weight: 300; }
@@ -37,6 +38,7 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .station-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #f1dda3; }
 .station-head button, .station-bag, .station-cell, .craft-result { pointer-events: auto; width: auto; padding: 6px 8px; border: 1px solid #7e9ca1; background: #243238; color: #edf7ff; font: inherit; font-size: 11px; box-shadow: none; cursor: pointer; }
 .station-body, .furnace-body { display: grid; grid-template-columns: auto auto 1fr 1fr 1.1fr; gap: 12px; align-items: start; }
+.station-body.armor-layout { grid-template-columns: auto auto 1fr 1fr 1fr 1.1fr; }
 .furnace-body { grid-template-columns: auto 1fr 1fr; }
 .craft-grid { display: grid; gap: 4px; }
 .craft-grid.size-2 { grid-template-columns: repeat(2, 64px); }
@@ -76,4 +78,4 @@ button.link { margin-top: 14px; border-color: #66766c; padding: 8px; background:
 .room-fields input { min-width: 0; border: 1px solid #6b969f; padding: 8px; background: #16272d; color: #fff; font: inherit; font-size: 11px; }
 .room-button { margin-top: 7px; padding: 8px; border-color: #8ac4d8; background: #39778c; box-shadow: none; font-size: 11px; }
 #room-status { display: block; margin-top: 7px; color: #a9c8d1; font-size: 9px; }
-@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #hunger { left: 12px; top: 90px; } #audio-state { left: 12px; top: 110px; } #network-state { left: 12px; top: 126px; } #village-state { left: 12px; top: 142px; } #guardian-state { left: 12px; top: 158px; } #raid-state { left: 12px; top: 174px; } #biome-state { left: 12px; top: 190px; } #dimension-state { left: 12px; top: 206px; } #wither-state { left: 12px; top: 220px; } #wither-star { left: 12px; top: 250px; } #codex { top: 156px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }
+@media (max-width: 560px) { #hint { top: 10px; width: 92%; } #brand { left: 12px; top: 12px; } #seed { left: 12px; top: 37px; } #world-time { left: 12px; top: 54px; } #health { left: 12px; top: 72px; } #hunger { left: 12px; top: 90px; } #armor { left: 12px; top: 108px; } #audio-state { left: 12px; top: 128px; } #network-state { left: 12px; top: 144px; } #village-state { left: 12px; top: 160px; } #guardian-state { left: 12px; top: 176px; } #raid-state { left: 12px; top: 192px; } #biome-state { left: 12px; top: 208px; } #dimension-state { left: 12px; top: 224px; } #wither-state { left: 12px; top: 238px; } #wither-star { left: 12px; top: 268px; } #codex { top: 156px; right: 12px; width: min(280px, calc(100vw - 24px)); } .panel { padding: 22px; } .slot { width: 28px; height: 32px; border-width: 2px; } .swatch { width: 14px; height: 14px; } #hotbar { gap: 3px; bottom: 13px; } #status { bottom: 58px; } }

@@ -75,7 +75,7 @@ const KIND_DEFAULTS: Record<MobKind, MobStats> = {
 
 const DROPS: Record<MobKind, readonly ItemType[]> = {
   stalker: ["dirt", "stone"],
-  brute: ["raw_beef", "stone"],
+  brute: ["raw_beef", "leather", "stone"],
   wisp: ["sand", "glass"],
   raider: ["stone", "planks"],
 };
