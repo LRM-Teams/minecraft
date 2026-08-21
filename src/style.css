@@ -28,6 +28,9 @@ canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated
 .slot small { position: absolute; bottom: 3px; right: 5px; font-size: 10px; color: white; }
 .swatch { width: 23px; height: 23px; border: 2px solid rgba(255,255,255,.26); box-shadow: inset -4px -4px rgba(0,0,0,.15); }
 .crafting_table { background: linear-gradient(135deg, #c49a5c 50%, #8b5a2b 50%); }.furnace { background: #6a6e72; border-color: #3a3d40; }
+.torch { background: radial-gradient(circle at 50% 30%, #ffe08a 0 35%, #c45a12 36% 55%, #5a3a22 56% 100%); }
+.wool { background: #f2f0e8; border-color: #c9c4b8; }
+.bed { background: linear-gradient(180deg, #c43c3c 0 45%, #8b5a2b 45% 100%); }
 .station-panel { position: absolute; inset: 10% 8%; z-index: 5; pointer-events: auto; padding: 14px; border: 2px solid #a99d76; background: rgba(12, 18, 20, .94); color: #dcecf0; overflow: auto; box-shadow: 8px 8px 0 rgba(0,0,0,.35); }
 .station-panel.hidden { display: none; }
 .station-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #f1dda3; }

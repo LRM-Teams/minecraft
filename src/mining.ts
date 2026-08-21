@@ -19,6 +19,9 @@ const DURATIONS: Record<BlockType, number> = {
   diamond_ore: 2.2,
   crafting_table: 0.65,
   furnace: 0.95,
+  torch: 0.05,
+  wool: 0.35,
+  bed: 0.4,
 };
 
 const PICKAXE_BLOCKS = new Set<BlockType>([
@@ -31,7 +34,7 @@ const PICKAXE_BLOCKS = new Set<BlockType>([
   "diamond_ore",
   "furnace",
 ]);
-const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "leaves"]);
+const AXE_BLOCKS = new Set<BlockType>(["wood", "planks", "crafting_table", "leaves", "bed"]);
 const SHOVEL_BLOCKS = new Set<BlockType>(["grass", "dirt", "sand"]);
 
 export const breakDuration = (block: BlockType, tool?: ExtraItem | null): number => {
