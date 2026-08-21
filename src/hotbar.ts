@@ -56,6 +56,7 @@ export const HOTBAR_TAG: Partial<Record<BlockType, string>> = {
   obsidian: "曜",
   crafting_table: "台",
   furnace: "炉",
+  chest: "箱",
   enchanting_table: "附",
   bookshelf: "书",
   brewing_stand: "酿",

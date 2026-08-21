@@ -14,8 +14,10 @@ const labelFor = (type: string): string => type;
 describe("preferBlockInteract", () => {
   it("keeps station / lever use only when the hotbar slot is empty", () => {
     expect(preferBlockInteract(0, "crafting_table")).toBe(true);
+    expect(preferBlockInteract(0, "chest")).toBe(true);
     expect(preferBlockInteract(0, "lever")).toBe(true);
     expect(preferBlockInteract(1, "crafting_table")).toBe(false);
+    expect(preferBlockInteract(1, "chest")).toBe(false);
     expect(preferBlockInteract(3, "lever")).toBe(false);
   });
 
