@@ -173,6 +173,7 @@ import {
 } from "./end";
 import { createEnderDragon, hitEnderDragon, updateEnderDragon } from "./enderDragon";
 import { createCrackOverlay, createViewmodel } from "./viewmodel";
+import { eyeOnFloor, findStandFloor, walkEyeY } from "./playerMove";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root is missing");
@@ -971,6 +972,11 @@ const currentTopY = (x: number, z: number): number => {
   if (dimension === "nether") return nether.topY(x, z);
   if (dimension === "end") return endWorld.topY(x, z);
   return world.topY(x, z);
+};
+const currentIsSolid = (x: number, y: number, z: number): boolean => {
+  if (dimension === "nether") return nether.isSolid(x, y, z);
+  if (dimension === "end") return endWorld.isSolid(x, y, z);
+  return world.isSolid(x, y, z);
 };
 const currentSize = (): number => dimension === "end" ? endWorld.size : dimension === "nether" ? nether.size : world.size;
 
@@ -2751,12 +2757,13 @@ const updatePlayer = (delta: number): void => {
       nextX = THREE.MathUtils.clamp(nextX, -size + 1, size - 1);
       nextZ = THREE.MathUtils.clamp(nextZ, -size + 1, size - 1);
     }
-    const nextGround = currentTopY(Math.round(nextX), Math.round(nextZ)) + 1.72;
-    const edgeBlocked = wantSneak && grounded && wouldFallOffEdge({
+    const nextEye = walkEyeY(currentIsSolid, nextX, nextZ, camera.position.y);
+    const edgeBlocked = wantSneak && grounded && nextEye !== null && wouldFallOffEdge({
       currentEyeY: camera.position.y,
-      nextEyeY: nextGround,
+      nextEyeY: nextEye,
     });
-    if (!edgeBlocked && nextGround <= camera.position.y + 0.85) {
+    // Local stand floor + 2-block headroom (not column topY — that blocked tunnels).
+    if (!edgeBlocked && nextEye !== null) {
       camera.position.x = nextX;
       camera.position.z = nextZ;
     }
@@ -2779,7 +2786,15 @@ const updatePlayer = (delta: number): void => {
   }
   if (!onLadder) verticalVelocity -= 19 * delta;
   camera.position.y += verticalVelocity * delta;
-  const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
+  const standFloorY = findStandFloor(
+    currentIsSolid,
+    camera.position.x,
+    camera.position.z,
+    camera.position.y,
+  );
+  const ground = standFloorY !== null
+    ? eyeOnFloor(standFloorY)
+    : eyeOnFloor(currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)));
   if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
   else if (onLadder) grounded = false;
   if (camera.position.y < -8) camera.position.set(...respawnPoint());
