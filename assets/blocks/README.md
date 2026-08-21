@@ -34,3 +34,8 @@ assets/blocks/<blockId>_<face>.png
 
 再生：`python3 tools/block-faces/gen_block_faces.py`  
 预览：`preview/contact_sheet.png`（16× 最近邻）。
+
+## LRM-1612 矿石 / 黑曜石
+
+额外方块：`coal_ore` `copper_ore` `iron_ore` `gold_ore` `diamond_ore` `lapis_ore` `redstone_ore` `obsidian`。
+再生：`python3 tools/block-faces/gen_ore_faces.py`；预览 `preview/ore_contact_sheet.png`；装备/火把说明见 `EQUIPMENT_TORCH_NOTE.md`。

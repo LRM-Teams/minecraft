@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "issue": "LRM-1603",
+  "issue": "LRM-1603+1612",
   "size": 16,
   "license": "cc0-original-procedural",
   "directory": "assets/blocks",
@@ -201,6 +201,154 @@
         "side",
         "side"
       ]
+    },
+    "coal_ore": {
+      "top": "coal_ore_top.png",
+      "bottom": "coal_ore_bottom.png",
+      "side": "coal_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 黑色煤块斑点",
+        "side": "石壁 + 另一套煤斑布局",
+        "bottom": "略深石底 + 煤斑"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "copper_ore": {
+      "top": "copper_ore_top.png",
+      "bottom": "copper_ore_bottom.png",
+      "side": "copper_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 橙铜斑",
+        "side": "石壁 + 铜斑",
+        "bottom": "略深 + 铜斑"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "iron_ore": {
+      "top": "iron_ore_top.png",
+      "bottom": "iron_ore_bottom.png",
+      "side": "iron_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 米褐铁矿斑",
+        "side": "石壁 + 铁矿斑",
+        "bottom": "略深 + 铁矿斑"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "gold_ore": {
+      "top": "gold_ore_top.png",
+      "bottom": "gold_ore_bottom.png",
+      "side": "gold_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 金斑",
+        "side": "石壁 + 金斑",
+        "bottom": "略深 + 金斑"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "diamond_ore": {
+      "top": "diamond_ore_top.png",
+      "bottom": "diamond_ore_bottom.png",
+      "side": "diamond_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 青色钻石结晶",
+        "side": "石壁 + 钻石结晶",
+        "bottom": "略深 + 钻石结晶"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "lapis_ore": {
+      "top": "lapis_ore_top.png",
+      "bottom": "lapis_ore_bottom.png",
+      "side": "lapis_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 深蓝青金斑",
+        "side": "石壁 + 青金斑",
+        "bottom": "略深 + 青金斑"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "redstone_ore": {
+      "top": "redstone_ore_top.png",
+      "bottom": "redstone_ore_bottom.png",
+      "side": "redstone_ore_side.png",
+      "semantics": {
+        "top": "石基质 + 红石粉粒",
+        "side": "石壁 + 红石粉粒",
+        "bottom": "略深 + 红石粉粒"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
+    },
+    "obsidian": {
+      "top": "obsidian_top.png",
+      "bottom": "obsidian_bottom.png",
+      "side": "obsidian_side.png",
+      "semantics": {
+        "top": "深紫黑曜石（略有光泽条纹）",
+        "side": "竖向深色层理",
+        "bottom": "更深底面"
+      },
+      "three_box_maps": [
+        "side",
+        "side",
+        "top",
+        "bottom",
+        "side",
+        "side"
+      ]
     }
-  }
+  },
+  "issues": [
+    "LRM-1603",
+    "LRM-1612"
+  ]
 }
