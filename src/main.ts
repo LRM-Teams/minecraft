@@ -19,6 +19,7 @@ import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, load
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, STREAM_CHUNK_RADIUS, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
+import { BOX_FACES, type BlockFace } from "./blockFaces";
 import {
   DEFAULT_HOTBAR,
   HOTBAR_SIZE,
@@ -364,16 +365,15 @@ const BIOME_TINTS: Record<Exclude<BiomeVariant, "default">, THREE.Color> = {
   sakura: new THREE.Color(0xf0b8c6),
 };
 
-type BlockFace = "side" | "top" | "bottom";
 const textureCache = new Map<string, THREE.Texture>();
-/** Distributable catalog icons for in-world block faces (CC0 atlas / singles). */
-const wikiBlockMaps = new Map<BlockType, THREE.Texture>();
 const colorHex = (color: THREE.Color) => `#${color.getHexString()}`;
 
-/** Build original 16px textures at runtime, keeping the game asset-free and crisp at every scale. */
+/**
+ * Procedural 16×16 face textures for the world mesh.
+ * World faces NEVER use HUD/item icons (that caused black wallpaper tiles).
+ * Hotbar still uses `iconFor` separately.
+ */
 const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture => {
-  const wiki = wikiBlockMaps.get(type);
-  if (wiki) return wiki;
   const cacheKey = `${type}-${face}`;
   const cached = textureCache.get(cacheKey);
   if (cached) return cached;
@@ -407,6 +407,58 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture 
     }
   } else if (type === "grass" && face === "bottom") {
     paint(new THREE.Color(colors.dirt));
+  } else if (type === "grass" && face === "top") {
+    paint(base);
+    for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
+      if (noise(x, y) > 0.55) paint(base.clone().multiplyScalar(0.78 + noise(x + 3, y) * 0.35), x, y, 2, 2);
+    }
+  } else if (type === "wood" && (face === "top" || face === "bottom")) {
+    // Log end-grain (rings) — distinct from bark sides.
+    const heart = base.clone().multiplyScalar(0.55);
+    const ring = base.clone().multiplyScalar(0.85);
+    paint(ring);
+    for (let r = 7; r >= 1; r -= 2) {
+      const col = r % 4 === 1 ? heart : ring;
+      for (let y = 0; y < 16; y += 1) for (let x = 0; x < 16; x += 1) {
+        const dx = x - 7.5;
+        const dy = y - 7.5;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= r - 0.6 && d <= r + 0.6) paint(col, x, y, 1, 1);
+      }
+    }
+    paint(heart, 7, 7, 2, 2);
+  } else if (type === "wood" && face === "side") {
+    paint(base);
+    for (let x = 0; x < 16; x += 1) {
+      if (x % 5 === 0) paint(base.clone().multiplyScalar(0.55), x, 0, 1, 16);
+      for (let y = 0; y < 16; y += 3) {
+        if (noise(x, y) > 0.7) paint(base.clone().multiplyScalar(0.7), x, y, 1, 2);
+      }
+    }
+  } else if (type === "crafting_table" && face === "top") {
+    const grid = base.clone().multiplyScalar(0.75);
+    paint(base);
+    paint(grid, 1, 1, 14, 14);
+    paint(base.clone().multiplyScalar(1.05), 3, 3, 4, 4);
+    paint(base.clone().multiplyScalar(1.05), 9, 3, 4, 4);
+    paint(base.clone().multiplyScalar(1.05), 3, 9, 4, 4);
+    paint(base.clone().multiplyScalar(1.05), 9, 9, 4, 4);
+  } else if (type === "crafting_table" && face === "side") {
+    paint(new THREE.Color(colors.planks));
+    paint(base, 0, 0, 16, 4);
+    for (let y = 4; y < 16; y += 4) paint(new THREE.Color(colors.planks).multiplyScalar(0.7), 0, y, 16, 1);
+  } else if (type === "bookshelf" && face === "side") {
+    paint(new THREE.Color(colors.planks));
+    for (let y = 2; y < 16; y += 4) {
+      paint(new THREE.Color(0x6b3a1f), 1, y, 14, 3);
+      paint(new THREE.Color(0xc4a35a), 2, y + 1, 3, 1);
+      paint(new THREE.Color(0x3a5a8a), 6, y + 1, 3, 1);
+      paint(new THREE.Color(0x8a2f2f), 10, y + 1, 3, 1);
+    }
+  } else if (type === "furnace" && face === "side") {
+    paint(new THREE.Color(0x5a5a5a));
+    paint(new THREE.Color(0x2a2a2a), 4, 4, 8, 8);
+    paint(base.clone().multiplyScalar(0.5), 5, 5, 6, 6);
   } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore" || type === "lapis_ore" || type === "redstone_ore") {
     // Ores: stone host rock with a bright mineral core and scattered flecks.
     paint(new THREE.Color(colors.stone));
@@ -448,11 +500,10 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture 
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
       if (type === "planks" && (y % 6 === 0 || x === 0 || x === 8)) paint(base.clone().multiplyScalar(0.55), x, y, type === "planks" ? 2 : 1, type === "planks" ? 1 : 1);
-      else if (type === "wood" && (x % 5 === 0 || (face === "top" && noise(x, y) > 0.66))) paint(base.clone().multiplyScalar(0.62), x, y, 1, 2);
       else if (type === "bricks" && (y % 4 === 0 || (x + Math.floor(y / 4) * 4) % 8 === 0)) paint(base.clone().multiplyScalar(0.58), x, y, 2, 1);
       else if (type === "glass" && (x === y || x + y === 14 || noise(x, y) > 0.82)) paint(base.clone().multiplyScalar(1.22), x, y, 1, 1);
       else if (type === "water" && y % 5 === 0) paint(base.clone().multiplyScalar(1.3), x, y, 2, 1);
-      else if (type !== "planks" && type !== "wood" && type !== "water" && noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.72 + noise(x + 4, y) * 0.45), x, y, 2, 2);
+      else if (type !== "planks" && type !== "water" && noise(x, y) > 0.58) paint(base.clone().multiplyScalar(0.72 + noise(x + 4, y) * 0.45), x, y, 2, 2);
     }
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -469,17 +520,13 @@ const matrix = new THREE.Matrix4();
 const ONE_WHITE = new THREE.Color(0xffffff);
 
 /**
- * Build a Lambert material for a block. Biome wash is applied via `tint` on
- * `material.color` — never via InstancedMesh `vertexColors` / `instanceColor`.
+ * Build Lambert materials for a block — always six face slots (BoxGeometry order).
+ * Biome wash via `tint` on `material.color` only (never vertexColors / instanceColor).
  *
- * Why: on several real GPUs (ANGLE / strict GL), `vertexColors:true` without a
- * fully-bound instanceColor buffer (or even *with* setColorAt on multi-material
- * grass meshes) still renders the mesh pitch black. The screenshot pattern
- * "sky/UI/glass OK, grass+trees black silhouettes" is that trap. Nether/End
- * already keep vertexColors off; overworld follows the same rule.
+ * World meshes must NOT share HUD icon textures; each face is its own 16×16 tile.
  */
-const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Material | THREE.Material[] => {
-  const material = (face: BlockFace = "side") => new THREE.MeshLambertMaterial({
+const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Material[] => {
+  const material = (face: BlockFace) => new THREE.MeshLambertMaterial({
     color: tint.clone(),
     map: blockTexture(type, face),
     transparent: type === "leaves" || type === "water" || type === "glass",
@@ -488,9 +535,11 @@ const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Ma
     depthWrite: type !== "water" && type !== "glass",
     vertexColors: false,
   });
-  if (type !== "grass") return material();
   const side = material("side");
-  return [side, side, material("top"), material("bottom"), side, side];
+  const top = material("top");
+  const bottom = material("bottom");
+  // Share side instances across four cardinal faces (matches BOX_FACES semantics).
+  return BOX_FACES.map((face) => (face === "top" ? top : face === "bottom" ? bottom : side));
 };
 
 type BlockMeshBucket = { type: BlockType; tint: THREE.Color; positions: BlockPosition[] };
@@ -1504,37 +1553,7 @@ const renderHotbar = (): void => {
 };
 renderHotbar();
 
-/** Load ship-safe distributable icons onto block faces (no restricted / wiki bytes). */
-const beginDistributableBlockMaps = (): void => {
-  const loader = new THREE.TextureLoader();
-  let pending = 0;
-  let settled = 0;
-  const maybeRefresh = (): void => {
-    settled += 1;
-    if (settled === pending) {
-      textureCache.clear();
-      syncRenderedChunks(true);
-    }
-  };
-  for (const type of BLOCK_TYPES) {
-    const src = iconFor(type);
-    if (!src) continue;
-    pending += 1;
-    loader.load(
-      src,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.magFilter = THREE.NearestFilter;
-        tex.minFilter = THREE.NearestFilter;
-        wikiBlockMaps.set(type, tex);
-        maybeRefresh();
-      },
-      undefined,
-      () => maybeRefresh(),
-    );
-  }
-};
-beginDistributableBlockMaps();
+/** HUD icons stay on the hotbar; world meshes use procedural six-face textures only (LRM-1604). */
 
 const hudRoot = document.querySelector<HTMLDivElement>("#hud")!;
 
