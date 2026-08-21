@@ -283,18 +283,22 @@ app.innerHTML = `
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fc8e8");
 let perf: PerfConfig = resolvePerfPreset();
-const fog = new THREE.Fog("#8fc8e8", perf.simpleBlockMaterials ? 18 : 28, perf.simpleBlockMaterials ? 52 : 86);
+const fog = new THREE.Fog("#8fc8e8", perf.simpleBlockMaterials ? 16 : 28, perf.simpleBlockMaterials ? 48 : 86);
 scene.fog = fog;
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 120);
 camera.rotation.order = "YXZ";
 const viewmodel = createViewmodel();
 camera.add(viewmodel.root);
 const crackOverlay = createCrackOverlay();
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  antialias: !perf.simpleBlockMaterials,
+  powerPreference: "high-performance",
+});
 renderer.setPixelRatio(Math.min(devicePixelRatio, perf.maxPixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = perf.shadowsEnabled;
 renderer.shadowMap.type = perf.softShadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+renderer.sortObjects = !perf.simpleBlockMaterials;
 app.prepend(renderer.domElement);
 
 const perfSelect = document.querySelector<HTMLSelectElement>("#perf-preset");
@@ -790,28 +794,34 @@ const blockMeshKey = (
 };
 
 /**
- * Per-chunk InstancedMesh mesher (LRM-1613): streaming only builds dirty chunks (throttled).
+ * Chunk-throttled mesher (LRM-1613).
+ * Simple/balanced: one InstancedMesh per bucket key across all loaded chunks
+ * (≈N× fewer draws than per-chunk meshes — SwiftShader's main cost).
+ * Quality keeps per-chunk meshes for frustum cull + cast shadows.
  */
 class BlockRenderer {
-  private byChunk = new Map<string, Map<string, THREE.InstancedMesh>>();
+  private chunkBuckets = new Map<string, Map<string, BlockMeshBucket>>();
+  private meshes = new Map<string, THREE.InstancedMesh>();
   private pending = new Set<string>();
+  private dirtyKeys = new Set<string>();
   private terrainCastShadow = false;
   private terrainReceiveShadow = false;
-  /** Cached raycast list — rebuilt only when meshes change. */
   private objectsCache: THREE.Object3D[] | null = null;
   private syncedCx = Number.NaN;
   private syncedCz = Number.NaN;
   private syncedRadius = -1;
 
+  private useGlobalBuckets(): boolean {
+    return perf.simpleBlockMaterials;
+  }
+
   setShadowFlags(cast: boolean, receive: boolean): void {
     this.terrainCastShadow = cast;
     this.terrainReceiveShadow = receive;
-    this.byChunk.forEach((meshes) => {
-      meshes.forEach((mesh) => {
-        const type = mesh.userData.blockType as BlockType;
-        mesh.castShadow = cast && !NO_CAST_SHADOW.has(type);
-        mesh.receiveShadow = receive;
-      });
+    this.meshes.forEach((mesh) => {
+      const type = mesh.userData.blockType as BlockType;
+      mesh.castShadow = cast && !NO_CAST_SHADOW.has(type);
+      mesh.receiveShadow = receive;
     });
   }
 
@@ -819,19 +829,68 @@ class BlockRenderer {
     this.objectsCache = null;
   }
 
-  private clearChunk(id: string): void {
-    const meshes = this.byChunk.get(id);
-    if (!meshes) return;
-    meshes.forEach((mesh) => disposeMesh(mesh));
-    this.byChunk.delete(id);
+  private meshKey(chunkId: string, bucketKey: string): string {
+    return this.useGlobalBuckets() ? bucketKey : `${chunkId}|${bucketKey}`;
+  }
+
+  private disposeGpu(key: string): void {
+    const mesh = this.meshes.get(key);
+    if (!mesh) return;
+    disposeMesh(mesh);
+    this.meshes.delete(key);
     this.invalidateObjectsCache();
+  }
+
+  private clearChunkData(id: string): void {
+    const prev = this.chunkBuckets.get(id);
+    if (!prev) return;
+    prev.forEach((_, bucketKey) => {
+      this.dirtyKeys.add(bucketKey);
+      if (!this.useGlobalBuckets()) this.disposeGpu(this.meshKey(id, bucketKey));
+    });
+    this.chunkBuckets.delete(id);
+  }
+
+  private flushDirtyGpu(): void {
+    if (!this.useGlobalBuckets()) return;
+    for (const bucketKey of [...this.dirtyKeys]) {
+      this.dirtyKeys.delete(bucketKey);
+      const positions: BlockPosition[] = [];
+      let type: BlockType | undefined;
+      let tint = ONE_WHITE;
+      this.chunkBuckets.forEach((buckets) => {
+        const bucket = buckets.get(bucketKey);
+        if (!bucket) return;
+        type = bucket.type;
+        tint = bucket.tint;
+        for (const position of bucket.positions) positions.push(position);
+      });
+      this.disposeGpu(bucketKey);
+      if (!type || !positions.length) continue;
+      const mesh = new THREE.InstancedMesh(box, cachedBlockMaterial(type, tint), positions.length);
+      mesh.castShadow = this.terrainCastShadow && !NO_CAST_SHADOW.has(type);
+      mesh.receiveShadow = this.terrainReceiveShadow;
+      mesh.frustumCulled = false;
+      positions.forEach((position, index) => {
+        applyBlockInstanceMatrix(type!, bucketKey, position, index, mesh);
+      });
+      applyBucketMaterialWash(mesh, type, bucketKey);
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.positions = positions;
+      mesh.userData.blockType = type;
+      this.meshes.set(bucketKey, mesh);
+      scene.add(mesh);
+      this.invalidateObjectsCache();
+    }
   }
 
   private buildChunk(world: VoxelWorld, cx: number, cz: number): void {
     const id = chunkIdOf(cx, cz);
-    this.clearChunk(id);
+    this.clearChunkData(id);
     const buckets = new Map<string, BlockMeshBucket>();
     world.visibleBlocksInChunk(cx, cz).forEach(({ type, position }) => {
+      // Dense alpha leaves dominate SwiftShader fill — omit in simple mode.
+      if (perf.simpleBlockMaterials && type === "leaves") return;
       const { key, tint } = blockMeshKey(world, type, position);
       let bucket = buckets.get(key);
       if (!bucket) {
@@ -840,10 +899,18 @@ class BlockRenderer {
       }
       bucket.positions.push(position);
     });
-    const meshes = new Map<string, THREE.InstancedMesh>();
+    this.chunkBuckets.set(id, buckets);
+
+    if (this.useGlobalBuckets()) {
+      buckets.forEach((_, key) => this.dirtyKeys.add(key));
+      this.flushDirtyGpu();
+      return;
+    }
+
     buckets.forEach((bucket, key) => {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
+      const gpuKey = this.meshKey(id, key);
       const mesh = new THREE.InstancedMesh(box, cachedBlockMaterial(type, tint), positions.length);
       mesh.castShadow = this.terrainCastShadow && !NO_CAST_SHADOW.has(type);
       mesh.receiveShadow = this.terrainReceiveShadow;
@@ -857,10 +924,9 @@ class BlockRenderer {
       mesh.userData.positions = positions;
       mesh.userData.blockType = type;
       mesh.userData.chunkId = id;
-      meshes.set(key, mesh);
+      this.meshes.set(gpuKey, mesh);
       scene.add(mesh);
     });
-    this.byChunk.set(id, meshes);
     this.invalidateObjectsCache();
   }
 
@@ -898,11 +964,11 @@ class BlockRenderer {
   ): void {
     const cx = Math.floor(centerX / CHUNK_SIZE);
     const cz = Math.floor(centerZ / CHUNK_SIZE);
-    // Standing still / same chunk with nothing pending: skip Set alloc + key walks.
     if (
       !opts.remeshAll
       && !opts.flush
       && this.pending.size === 0
+      && this.dirtyKeys.size === 0
       && cx === this.syncedCx
       && cz === this.syncedCz
       && radius === this.syncedRadius
@@ -910,7 +976,7 @@ class BlockRenderer {
       let missing = false;
       for (let dx = -radius; dx <= radius; dx += 1) {
         for (let dz = -radius; dz <= radius; dz += 1) {
-          if (!this.byChunk.has(chunkIdOf(cx + dx, cz + dz))) {
+          if (!this.chunkBuckets.has(chunkIdOf(cx + dx, cz + dz))) {
             missing = true;
             break;
           }
@@ -920,13 +986,22 @@ class BlockRenderer {
       if (!missing) return;
     }
 
+    if (opts.remeshAll) {
+      for (const key of [...this.meshes.keys()]) this.disposeGpu(key);
+      this.chunkBuckets.clear();
+      this.dirtyKeys.clear();
+      this.pending.clear();
+    }
+
     const desired = this.desiredIds(centerX, centerZ, radius);
-    for (const id of [...this.byChunk.keys()]) {
+    for (const id of [...this.chunkBuckets.keys()]) {
       if (!desired.has(id)) {
-        this.clearChunk(id);
+        this.clearChunkData(id);
         this.pending.delete(id);
       }
     }
+    if (this.useGlobalBuckets()) this.flushDirtyGpu();
+
     for (const id of [...this.pending]) {
       if (!desired.has(id)) this.pending.delete(id);
     }
@@ -934,7 +1009,7 @@ class BlockRenderer {
       desired.forEach((id) => this.pending.add(id));
     } else {
       desired.forEach((id) => {
-        if (!this.byChunk.has(id)) this.pending.add(id);
+        if (!this.chunkBuckets.has(id)) this.pending.add(id);
       });
     }
     const budget = opts.flush ? Number.POSITIVE_INFINITY : (opts.maxBuilds ?? 3);
@@ -961,16 +1036,14 @@ class BlockRenderer {
 
   objects(): THREE.Object3D[] {
     if (!this.objectsCache) {
-      const out: THREE.Object3D[] = [];
-      this.byChunk.forEach((meshes) => meshes.forEach((mesh) => out.push(mesh)));
-      this.objectsCache = out;
+      this.objectsCache = [...this.meshes.values()];
     }
     return this.objectsCache;
   }
 
-  show(): void { this.byChunk.forEach((meshes) => meshes.forEach((mesh) => { mesh.visible = true; })); }
+  show(): void { this.meshes.forEach((mesh) => { mesh.visible = true; }); }
 
-  hide(): void { this.byChunk.forEach((meshes) => meshes.forEach((mesh) => { mesh.visible = false; })); }
+  hide(): void { this.meshes.forEach((mesh) => { mesh.visible = false; }); }
 }
 
 /** A per-material texture helper for the module-internal nether blocks. */
@@ -1942,8 +2015,9 @@ const applyPerfConfig = (next: PerfConfig, remesh = true): void => {
     starMaterial.opacity = 0;
     moonMaterial.opacity = 0;
   }
-  fog.near = perf.simpleBlockMaterials ? 18 : 28;
-  fog.far = perf.simpleBlockMaterials ? 52 : 86;
+  fog.near = perf.simpleBlockMaterials ? 16 : 28;
+  fog.far = perf.simpleBlockMaterials ? 48 : 86;
+  renderer.sortObjects = !perf.simpleBlockMaterials;
   nextTorchSyncAt = 0;
   nextSkySyncAt = 0;
   syncTorchLights();
@@ -3737,7 +3811,11 @@ const frame = (now: number): void => {
   viewmodel.root.visible = document.pointerLockElement === renderer.domElement && !anyStationOpen();
   if (tickAllFurnaces(stations, delta) && stations.furnaceOpen) refreshStationsUi();
   if (tickAllBrewingStands(stations, delta) && stations.brewOpen) refreshStationsUi();
-  if (!rendererLost) renderer.render(scene, camera);
+  // Under SwiftShader, skip alternate presents after a heavy frame (≥250ms).
+  const heavyFrame = delta >= 0.25;
+  if (!rendererLost && (!heavyFrame || (ecologyPhase & 1) === 0)) {
+    renderer.render(scene, camera);
+  }
   const fpsLabel = tickFps(fpsSample, now);
   if (fpsLabel) fpsHud.textContent = fpsLabel;
   requestAnimationFrame(frame);
