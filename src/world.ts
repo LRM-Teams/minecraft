@@ -1,10 +1,10 @@
 import { describeColumn, biomeAt, type BiomeProfile } from "./biomes";
 
-export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed", "redstone_dust", "lever", "redstone_torch", "redstone_lamp"] as const;
+export const BLOCK_TYPES = ["grass", "dirt", "stone", "wood", "planks", "leaves", "sand", "water", "bricks", "glass", "coal_ore", "copper_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore", "obsidian", "crafting_table", "furnace", "enchanting_table", "bookshelf", "brewing_stand", "torch", "wool", "bed", "redstone_dust", "lever", "redstone_torch", "redstone_lamp", "oak_door", "ladder"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
-/** Blocks that do not occlude neighbours or block movement (torch / dust / lever fixtures). */
-export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch", "redstone_dust", "lever", "redstone_torch"]);
+/** Blocks that do not occlude neighbours or block movement (torch / dust / lever / ladder fixtures). */
+export const NON_SOLID_BLOCKS: ReadonlySet<BlockType> = new Set(["water", "torch", "redstone_dust", "lever", "redstone_torch", "ladder"]);
 export const CHUNK_SIZE = 16;
 /** Soft vertical build limit (inclusive). */
 export const MAX_BUILD_Y = 24;
@@ -17,7 +17,14 @@ export type VillageHome = { id: string; entrance: BlockPosition; interior: Block
 export type VillageAnchor = { id: string; center: BlockPosition; plaza: BlockPosition; homes: VillageHome[] };
 /** Compact read view used by the HUD; detailed anchors live in `villages`. */
 export type VillageInfo = { center: BlockPosition; houses: VillageHome[] };
-export type WorldSnapshot = { seed: number; size: number; blocks: [string, BlockType][]; villages?: VillageAnchor[] };
+export type WorldSnapshot = {
+  seed: number;
+  size: number;
+  blocks: [string, BlockType][];
+  villages?: VillageAnchor[];
+  /** Open oak_door cell keys (`x,y,z`); closed doors omit keys and stay solid. */
+  openDoors?: string[];
+};
 const NEIGHBORS: BlockPosition[] = [
   { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 1, z: 0 },
   { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
@@ -50,6 +57,8 @@ export class VoxelWorld {
   readonly blocks = new Map<string, BlockType>();
   /** Village metadata is seed-stable and is retained alongside world snapshots. */
   readonly villages: VillageAnchor[] = [];
+  /** Open door cells (`x,y,z`) — open oak doors do not block movement. */
+  readonly openDoors = new Set<string>();
   readonly size: number;
   readonly seed: number;
   /** Chunks already terrain-generated (player edits never clear this). */
@@ -74,7 +83,9 @@ export class VoxelWorld {
 
   isSolid(x: number, y: number, z: number): boolean {
     const block = this.get(x, y, z);
-    return block !== undefined && !NON_SOLID_BLOCKS.has(block);
+    if (block === undefined) return false;
+    if (block === "oak_door" && this.openDoors.has(key(x, y, z))) return false;
+    return !NON_SOLID_BLOCKS.has(block);
   }
 
   set(position: BlockPosition, type: BlockType): void {
@@ -144,9 +155,13 @@ export class VoxelWorld {
         && (Math.abs(this.chunkAt(x) - centerChunkX) > chunkRadius || Math.abs(this.chunkAt(z) - centerChunkZ) > chunkRadius)
       ) return;
       const exposed = NEIGHBORS.some((offset) => {
-        const neighbour = this.get(x + offset.x, y + offset.y, z + offset.z);
+        const nx = x + offset.x;
+        const ny = y + offset.y;
+        const nz = z + offset.z;
+        const neighbour = this.get(nx, ny, nz);
         if (neighbour === undefined) return true;
-        if (NON_SOLID_BLOCKS.has(neighbour) && type !== neighbour) return true;
+        // Open doors / ladders / fixtures expose faces like other non-solids.
+        if (!this.isSolid(nx, ny, nz) && type !== neighbour) return true;
         return false;
       });
       if (exposed) visible.push({ position: { x, y, z }, type });
@@ -155,13 +170,20 @@ export class VoxelWorld {
   }
 
   snapshot(): WorldSnapshot {
-    return { seed: this.seed, size: this.size, blocks: [...this.blocks.entries()], villages: this.cloneVillages() };
+    return {
+      seed: this.seed,
+      size: this.size,
+      blocks: [...this.blocks.entries()],
+      villages: this.cloneVillages(),
+      openDoors: this.openDoors.size ? [...this.openDoors] : undefined,
+    };
   }
 
   static fromSnapshot(snapshot: WorldSnapshot, size = snapshot.size ?? 30): VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
     world.generatedChunks.clear();
+    world.openDoors.clear();
     snapshot.blocks.forEach(([position, type]) => world.blocks.set(position, type));
     // Mark every chunk that has saved blocks as already generated so streaming
     // does not overwrite player edits with fresh terrain.
@@ -184,6 +206,7 @@ export class VoxelWorld {
     // Older local saves have no village record. Add the deterministic structure
     // after their saved edits, without changing the snapshot schema requirement.
     else world.generateVillage();
+    snapshot.openDoors?.forEach((doorKey) => world.openDoors.add(doorKey));
     return world;
   }
 
@@ -367,6 +390,11 @@ export class VoxelWorld {
         if (!doorway) this.set({ x, y, z }, (x === minX || x === maxX) && y === groundY + 2 ? "glass" : "planks");
       }
     }
+    // Vanilla-ish oak door in the doorway (2 tall). Starts closed; players toggle with right-click.
+    const doorLower = { x: centerX, y: groundY + 1, z: doorZ };
+    const doorUpper = { x: centerX, y: groundY + 2, z: doorZ };
+    this.set(doorLower, "oak_door");
+    this.set(doorUpper, "oak_door");
     for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) this.set({ x, y: groundY + 4, z }, "wood");
     this.set({ x: centerX - 1, y: groundY + 1, z: centerZ }, "wool");
     this.set({ x: centerX - 1, y: groundY + 1, z: centerZ + (entranceSide === "north" ? 1 : -1) }, "wool");

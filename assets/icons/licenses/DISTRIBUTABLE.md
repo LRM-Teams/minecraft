@@ -71,6 +71,7 @@ Atlas: `assets/icons/atlas.png` + `assets/icons/atlas.json`.
 | `iron_pickaxe` | `cache/distributable/iron_pickaxe.png` | `cc0-original-procedural` |
 | `iron_shovel` | `cache/distributable/iron_shovel.png` | `cc0-original-procedural` |
 | `iron_sword` | `cache/distributable/iron_sword.png` | `cc0-original-procedural` |
+| `ladder` | `cache/distributable/ladder.png` | `cc0-original-procedural` |
 | `lapis_lazuli` | `cache/distributable/lapis_lazuli.png` | `cc0-original-procedural` |
 | `lapis_ore` | `cache/distributable/lapis_ore.png` | `cc0-original-procedural` |
 | `lava` | `cache/distributable/lava.png` | `cc0-original-procedural` |
@@ -84,6 +85,7 @@ Atlas: `assets/icons/atlas.png` + `assets/icons/atlas.json`.
 | `nether_portal` | `cache/distributable/nether_portal.png` | `cc0-original-procedural` |
 | `nether_wart` | `cache/distributable/nether_wart.png` | `cc0-original-procedural` |
 | `netherrack` | `cache/distributable/netherrack.png` | `cc0-original-procedural` |
+| `oak_door` | `cache/distributable/oak_door.png` | `cc0-original-procedural` |
 | `obsidian` | `cache/distributable/obsidian.png` | `cc0-original-procedural` |
 | `paper` | `cache/distributable/paper.png` | `cc0-original-procedural` |
 | `planks` | `cache/distributable/planks.png` | `cc0-original-procedural` |

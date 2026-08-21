@@ -108,6 +108,13 @@ import {
 } from "./brewing";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
 import { breakBedAt, hostileWithinSleepRange, trySleepInBed } from "./bed";
+import { breakDoorAt, isDoorOpen, toggleDoorAt } from "./doors";
+import { isClimbingLadder, LADDER_CLIMB_SPEED } from "./ladder";
+import {
+  resolveMoveMode,
+  speedForMode,
+  wouldFallOffEdge,
+} from "./sneak";
 import { TORCH_LIGHT, torchesNear } from "./torch";
 import {
   clearLeverAt,
@@ -191,7 +198,7 @@ app.innerHTML = `
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
     <div id="held-icon" aria-hidden="true"></div>
-    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · 左键挖掘 · 右键放置 · 1–9 热键 · E 背包 · Q 丢弃 · R 工具 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · Shift 冲刺 · Ctrl 潜行 · 左键挖掘 · 右键放置 · 1–9 热键 · E 背包 · Q 丢弃 · R 工具 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -207,11 +214,14 @@ app.innerHTML = `
       <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
       <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
+      <div class="recipe">木门：木板×6 → ×3（工作台）· 放置后右键开关，关闭时挡路</div>
+      <div class="recipe">梯子：木棍×7（H 形，工作台）→ ×3 · 贴墙放置，贴着可攀爬上下</div>
+      <div class="recipe">操控：<kbd>Shift</kbd> 冲刺（饱食&gt;6）· <kbd>Ctrl</kbd> 潜行（减速+边缘防坠；与冲刺互斥）</div>
       <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食/喝药</div>
       <div class="recipe">护甲：皮革/铁锭工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
       <div class="recipe">附魔：甘蔗×3→纸；纸×3+皮革→书；书+钻石×2+黑曜石×4→附魔台；书架环绕增强；青金石+经验附魔锋利/保护/效率</div>
       <div class="recipe">酿造：烈焰棒+石头×3→酿造台；玻璃×3→玻璃瓶；甘蔗→糖；烈焰棒→烈焰粉×2；金锭+苹果→闪烁西瓜；水瓶+下界疣→粗制；再加西瓜/糖/蜘蛛眼→治疗/迅捷/剧毒</div>
-      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/酿造台/床/村民交互。幽火掉烈焰棒与下界疣；潜行者掉蜘蛛眼。</p>
+      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/酿造台/床/木门/村民交互。幽火掉烈焰棒与下界疣；潜行者掉蜘蛛眼。</p>
     </aside>
   </div>
   <div id="start-screen">
@@ -220,7 +230,7 @@ app.innerHTML = `
       <h1>VOXEL ATELIER</h1>
       <p>探索、采集、建造。一个受经典体素沙盒启发的原创浏览器世界。</p>
       <button id="play">进入世界</button>
-      <p class="keys">WASD / 方向键无限探索　空格跳跃　鼠标视角<br/>左键长按破坏　右键放置（持方块时优先放置，空着手交互拉杆/床）<br/>1–9 / 滚轮切换热键　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效</p>
+      <p class="keys">WASD / 方向键无限探索　空格跳跃　Shift 冲刺　Ctrl 潜行　鼠标视角<br/>左键长按破坏　右键放置（持方块时优先放置，空着手交互拉杆/床/木门）<br/>1–9 / 滚轮切换热键　E 合成　R 切换工具　C 木板 · V 石砖 · G 图鉴 · M 音效</p>
       <section id="multiplayer-panel">
         <strong>本地联机房间</strong>
         <p>同一网站打开两个标签页，输入相同房间码即可同步探索与建造。</p>
@@ -354,9 +364,11 @@ const colors: Record<BlockType, number> = {
   lever: 0x8a7a5a,
   redstone_torch: 0xff3030,
   redstone_lamp: 0x5a4030,
+  oak_door: 0x8b5a2b,
+  ladder: 0x9a6a3a,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", redstone_ore: "红石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床", redstone_dust: "红石粉", lever: "拉杆", redstone_torch: "红石火把", redstone_lamp: "红石灯",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", redstone_ore: "红石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", brewing_stand: "酿造台", torch: "火把", wool: "羊毛", bed: "床", redstone_dust: "红石粉", lever: "拉杆", redstone_torch: "红石火把", redstone_lamp: "红石灯", oak_door: "木门", ladder: "梯子",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -522,6 +534,18 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.Texture 
     paint(wood);
     paint(base, 0, 0, 16, 9);
     for (let x = 0; x < 16; x += 2) paint(base.clone().multiplyScalar(0.85), x, 2, 1, 5);
+  } else if (type === "oak_door") {
+    paint(base);
+    paint(base.clone().multiplyScalar(0.7), 0, 0, 16, 1);
+    paint(base.clone().multiplyScalar(0.7), 0, 15, 16, 1);
+    paint(base.clone().multiplyScalar(0.7), 0, 0, 1, 16);
+    paint(base.clone().multiplyScalar(0.7), 15, 0, 1, 16);
+    paint(new THREE.Color(0x3a3020), 11, 7, 2, 2);
+  } else if (type === "ladder") {
+    paint(new THREE.Color(0x000000));
+    paint(base, 2, 0, 2, 16);
+    paint(base, 12, 0, 2, 16);
+    for (let y = 2; y < 16; y += 4) paint(base.clone().multiplyScalar(1.1), 2, y, 12, 2);
   } else {
     paint(base);
     for (let y = 0; y < 16; y += 2) for (let x = 0; x < 16; x += 2) {
@@ -597,6 +621,8 @@ class BlockRenderer {
       } else if (type === "redstone_dust") {
         const p = wirePowerAt(redstoneNet.wirePower, position);
         key = `redstone_dust:${p > 0 ? Math.ceil(p / 5) : 0}`;
+      } else if (type === "oak_door") {
+        key = isDoorOpen(world, position) ? "oak_door:open" : "oak_door:closed";
       }
       let bucket = buckets.get(key);
       if (!bucket) {
@@ -610,7 +636,7 @@ class BlockRenderer {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
       const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
-      mesh.castShadow = type !== "leaves" && type !== "torch" && type !== "redstone_dust" && type !== "lever" && type !== "redstone_torch";
+      mesh.castShadow = type !== "leaves" && type !== "torch" && type !== "redstone_dust" && type !== "lever" && type !== "redstone_torch" && type !== "ladder";
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       positions.forEach((position, index) => {
@@ -637,6 +663,19 @@ class BlockRenderer {
             new THREE.Vector3(position.x, position.y - 0.2, position.z),
             new THREE.Quaternion(),
             new THREE.Vector3(1, 0.55, 1),
+          );
+        } else if (type === "oak_door") {
+          const open = key.endsWith(":open");
+          matrix.compose(
+            new THREE.Vector3(position.x + (open ? 0.35 : 0), position.y, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(open ? 0.18 : 0.85, 1, 1),
+          );
+        } else if (type === "ladder") {
+          matrix.compose(
+            new THREE.Vector3(position.x, position.y, position.z),
+            new THREE.Quaternion(),
+            new THREE.Vector3(0.92, 1, 0.12),
           );
         } else {
           matrix.makeTranslation(position.x, position.y, position.z);
@@ -2065,6 +2104,13 @@ const edit = (place: boolean): void => {
         soundscape.play("break");
         room?.sendEdit({ action: "remove", position: target.position });
       }
+    } else if (existing === "oak_door") {
+      const removed = breakDoorAt(world, target.position);
+      if (removed) {
+        inventory[removed] += 1;
+        soundscape.play("break");
+        room?.sendEdit({ action: "remove", position: target.position });
+      }
     } else {
       const removed = world.remove(target.position);
       if (removed) {
@@ -2452,6 +2498,15 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         persist();
         return;
       }
+      if (aimed === "oak_door") {
+        const open = toggleDoorAt(world, target.position);
+        if (open === undefined) return;
+        refreshWorld();
+        status.textContent = open ? "木门已打开" : "木门已关闭";
+        soundscape.play("place");
+        persist();
+        return;
+      }
       } else if (aimed === "crafting_table" || aimed === "furnace" || aimed === "enchanting_table" || aimed === "brewing_stand") {
         // Still open stations even while holding blocks (vanilla: use without placing into the block).
         if (aimed === "crafting_table") {
@@ -2662,7 +2717,13 @@ addEventListener("resize", () => {
 const updatePlayer = (delta: number): void => {
   const inputX = Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"));
   const inputZ = Number(keys.has("KeyW") || keys.has("ArrowUp")) - Number(keys.has("KeyS") || keys.has("ArrowDown"));
-  const wantSprint = keys.has("ShiftLeft") && canSprint(hunger);
+  const moveMode = resolveMoveMode({
+    sneakHeld: keys.has("ControlLeft") || keys.has("ControlRight"),
+    sprintHeld: keys.has("ShiftLeft") || keys.has("ShiftRight"),
+    canSprint: canSprint(hunger),
+  });
+  const wantSprint = moveMode === "sprint";
+  const wantSneak = moveMode === "sneak";
   const effectTick = tickEffects(potionEffects, playerHealth, delta, poisonAcc);
   if (effectTick.healthDelta !== 0) {
     playerHealth = Math.max(1, Math.min(maxPlayerHealth, playerHealth + effectTick.healthDelta));
@@ -2673,9 +2734,11 @@ const updatePlayer = (delta: number): void => {
     }
   }
   if (effectTick.changed) renderEffects();
-  const speed = (wantSprint ? 8 : 4.4) * effectTick.speedMul;
+  const speed = speedForMode(moveMode) * effectTick.speedMul;
   const prevX = camera.position.x;
   const prevZ = camera.position.z;
+  const onLadder = dimension === "overworld"
+    && isClimbingLadder(world, camera.position.x, camera.position.y, camera.position.z);
   if (inputX || inputZ) {
     const length = Math.hypot(inputX, inputZ);
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
@@ -2689,22 +2752,36 @@ const updatePlayer = (delta: number): void => {
       nextZ = THREE.MathUtils.clamp(nextZ, -size + 1, size - 1);
     }
     const nextGround = currentTopY(Math.round(nextX), Math.round(nextZ)) + 1.72;
-    if (nextGround <= camera.position.y + 0.85) { camera.position.x = nextX; camera.position.z = nextZ; }
+    const edgeBlocked = wantSneak && grounded && wouldFallOffEdge({
+      currentEyeY: camera.position.y,
+      nextEyeY: nextGround,
+    });
+    if (!edgeBlocked && nextGround <= camera.position.y + 0.85) {
+      camera.position.x = nextX;
+      camera.position.z = nextZ;
+    }
   }
   const moved = Math.hypot(camera.position.x - prevX, camera.position.z - prevZ);
   if (moved > 0) {
     addExhaustion(hunger, moved * (wantSprint ? EXHAUSTION.sprintPerMeter : EXHAUSTION.walkPerMeter));
   }
-  if (grounded && keys.has("Space")) {
+  if (onLadder) {
+    const climbUp = keys.has("Space") || inputZ > 0;
+    const climbDown = wantSneak || inputZ < 0;
+    if (climbUp && !climbDown) verticalVelocity = LADDER_CLIMB_SPEED;
+    else if (climbDown && !climbUp) verticalVelocity = -LADDER_CLIMB_SPEED;
+    else verticalVelocity = 0;
+  } else if (grounded && keys.has("Space")) {
     verticalVelocity = 7.2;
     grounded = false;
     addExhaustion(hunger, wantSprint ? EXHAUSTION.sprintJump : EXHAUSTION.jump);
     soundscape.play("jump");
   }
-  verticalVelocity -= 19 * delta;
+  if (!onLadder) verticalVelocity -= 19 * delta;
   camera.position.y += verticalVelocity * delta;
   const ground = currentTopY(Math.round(camera.position.x), Math.round(camera.position.z)) + 1.72;
   if (camera.position.y <= ground) { camera.position.y = ground; verticalVelocity = 0; grounded = true; }
+  else if (onLadder) grounded = false;
   if (camera.position.y < -8) camera.position.set(...respawnPoint());
   const hungerTick = tickHunger(hunger, playerHealth, maxPlayerHealth, delta);
   if (hungerTick.healthDelta !== 0) {

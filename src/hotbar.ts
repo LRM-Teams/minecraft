@@ -62,6 +62,8 @@ export const HOTBAR_TAG: Partial<Record<BlockType, string>> = {
   torch: "炬",
   wool: "毛",
   bed: "床",
+  oak_door: "门",
+  ladder: "梯",
   redstone_dust: "粉",
   lever: "杆",
   redstone_torch: "红炬",
