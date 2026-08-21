@@ -51,7 +51,8 @@ const cloneVillage = (village: VillageAnchor): VillageAnchor => ({
 
 /**
  * Deterministic voxel world with infinite chunk streaming.
- * `size` is the initial generated radius (save/compat); exploration streams beyond it.
+ * `size` is the logical / save radius; spawn only eagerly generates a small ring
+ * so entering a world does not stall the main thread for seconds.
  */
 export class VoxelWorld {
   readonly blocks = new Map<string, BlockType>();
@@ -63,11 +64,14 @@ export class VoxelWorld {
   readonly seed: number;
   /** Chunks already terrain-generated (player edits never clear this). */
   private readonly generatedChunks = new Set<string>();
+  /** Position keys (`x,y,z`) indexed by chunk — speeds per-chunk meshing. */
+  private readonly blocksByChunk = new Map<string, Set<string>>();
 
   constructor(seed = 72831, size = 48) {
     this.seed = seed;
     this.size = size;
-    this.ensureRadius(0, 0, size);
+    // Eager spawn ring only (3×3 chunks). Rest streams via ensureAround with a budget.
+    this.ensureAround(0, 0, 1);
     this.generateVillage();
   }
 
@@ -90,13 +94,41 @@ export class VoxelWorld {
 
   set(position: BlockPosition, type: BlockType): void {
     if (position.y < 0 || position.y > MAX_BUILD_Y) return;
-    this.blocks.set(key(position.x, position.y, position.z), type);
+    const pk = key(position.x, position.y, position.z);
+    this.blocks.set(pk, type);
+    this.indexBlock(position.x, position.z, pk, true);
   }
 
   remove(position: BlockPosition): BlockType | undefined {
-    const block = this.get(position.x, position.y, position.z);
-    if (block) this.blocks.delete(key(position.x, position.y, position.z));
+    const pk = key(position.x, position.y, position.z);
+    const block = this.blocks.get(pk);
+    if (block) {
+      this.blocks.delete(pk);
+      this.indexBlock(position.x, position.z, pk, false);
+    }
     return block;
+  }
+
+  /** Index or un-index a block key under its chunk for O(blocks-in-chunk) meshing. */
+  private indexBlock(x: number, z: number, positionKey: string, present: boolean): void {
+    const ck = chunkKey(this.chunkAt(x), this.chunkAt(z));
+    let set = this.blocksByChunk.get(ck);
+    if (present) {
+      if (!set) {
+        set = new Set();
+        this.blocksByChunk.set(ck, set);
+      }
+      set.add(positionKey);
+      return;
+    }
+    set?.delete(positionKey);
+  }
+
+  /** Clear a cell without returning the prior type (village flatten / door clear). */
+  private clearAt(x: number, y: number, z: number): void {
+    const pk = key(x, y, z);
+    if (!this.blocks.delete(pk)) return;
+    this.indexBlock(x, z, pk, false);
   }
 
   topY(x: number, z: number): number {
@@ -110,16 +142,33 @@ export class VoxelWorld {
   }
 
   /**
-   * Stream terrain around a world position. Returns true when any new chunk was generated
-   * (callers should rebuild meshes).
+   * Stream terrain around a world position. Generates at most `budget` new chunks
+   * per call (nearest first) so walking never stalls on a full ring of terrain gen.
    */
-  ensureAround(worldX: number, worldZ: number, chunkRadius = STREAM_CHUNK_RADIUS): boolean {
+  ensureAround(
+    worldX: number,
+    worldZ: number,
+    chunkRadius = STREAM_CHUNK_RADIUS,
+    budget = Number.POSITIVE_INFINITY,
+  ): boolean {
     const cx = this.chunkAt(worldX);
     const cz = this.chunkAt(worldZ);
-    let grew = false;
+    const missing: { dx: number; dz: number; dist: number }[] = [];
     for (let dx = -chunkRadius; dx <= chunkRadius; dx += 1) {
       for (let dz = -chunkRadius; dz <= chunkRadius; dz += 1) {
-        if (this.ensureChunk(cx + dx, cz + dz)) grew = true;
+        if (!this.generatedChunks.has(chunkKey(cx + dx, cz + dz))) {
+          missing.push({ dx, dz, dist: dx * dx + dz * dz });
+        }
+      }
+    }
+    missing.sort((a, b) => a.dist - b.dist);
+    let grew = false;
+    let used = 0;
+    for (const item of missing) {
+      if (used >= budget) break;
+      if (this.ensureChunk(cx + item.dx, cz + item.dz)) {
+        grew = true;
+        used += 1;
       }
     }
     return grew;
@@ -157,23 +206,18 @@ export class VoxelWorld {
   }
 
   /**
-   * Exposed blocks inside one chunk only (bounded scan). Prefer this for incremental meshing
-   * so a growing open world does not re-scan every stored block on each rebuild.
+   * Exposed blocks inside one chunk only. Uses the per-chunk index so remesh cost
+   * stays O(blocks in chunk), not O(chunk volume) or O(whole world).
    */
   visibleBlocksInChunk(cx: number, cz: number): { position: BlockPosition; type: BlockType }[] {
     const visible: { position: BlockPosition; type: BlockType }[] = [];
-    const minX = cx * CHUNK_SIZE;
-    const minZ = cz * CHUNK_SIZE;
-    const maxX = minX + CHUNK_SIZE - 1;
-    const maxZ = minZ + CHUNK_SIZE - 1;
-    for (let x = minX; x <= maxX; x += 1) {
-      for (let z = minZ; z <= maxZ; z += 1) {
-        for (let y = 0; y <= MAX_BUILD_Y; y += 1) {
-          const type = this.get(x, y, z);
-          if (!type) continue;
-          if (this.isExposed(x, y, z, type)) visible.push({ position: { x, y, z }, type });
-        }
-      }
+    const indexed = this.blocksByChunk.get(chunkKey(cx, cz));
+    if (!indexed) return visible;
+    for (const positionKey of indexed) {
+      const type = this.blocks.get(positionKey);
+      if (!type) continue;
+      const [x, y, z] = positionKey.split(",").map(Number);
+      if (this.isExposed(x, y, z, type)) visible.push({ position: { x, y, z }, type });
     }
     return visible;
   }
@@ -215,9 +259,13 @@ export class VoxelWorld {
   static fromSnapshot(snapshot: WorldSnapshot, size = snapshot.size ?? 30): VoxelWorld {
     const world = new VoxelWorld(snapshot.seed, size);
     world.blocks.clear();
+    world.blocksByChunk.clear();
     world.generatedChunks.clear();
     world.openDoors.clear();
-    snapshot.blocks.forEach(([position, type]) => world.blocks.set(position, type));
+    snapshot.blocks.forEach(([position, type]) => {
+      const [x, y, z] = position.split(",").map(Number);
+      world.set({ x, y, z }, type);
+    });
     // Mark every chunk that has saved blocks as already generated so streaming
     // does not overwrite player edits with fresh terrain.
     snapshot.blocks.forEach(([position]) => {
@@ -310,7 +358,7 @@ export class VoxelWorld {
             hash(x + y, z + y * 2, this.seed) > 0.42 &&
             y > 3;
           if ((cavity > 0.58 || tunnel) && !this.isSupportColumn(x, y - 1, z)) {
-            this.blocks.delete(key(x, y, z));
+            this.clearAt(x, y, z);
           }
         }
       }
@@ -431,7 +479,7 @@ export class VoxelWorld {
   }
 
   private prepareVillageGround(x: number, z: number, groundY: number): void {
-    for (let y = MAX_BUILD_Y; y > groundY; y -= 1) this.blocks.delete(key(x, y, z));
+    for (let y = MAX_BUILD_Y; y > groundY; y -= 1) this.clearAt(x, y, z);
     const top = this.topY(x, z);
     for (let y = Math.max(0, top + 1); y < groundY; y += 1) this.set({ x, y, z }, "dirt");
     this.set({ x, y: groundY, z }, "grass");
@@ -441,7 +489,7 @@ export class VoxelWorld {
     const minX = centerX - 2, maxX = centerX + 2, minZ = centerZ - 2, maxZ = centerZ + 2;
     for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) {
       this.set({ x, y: groundY, z }, "bricks");
-      for (let y = groundY + 1; y <= groundY + 4; y += 1) this.blocks.delete(key(x, y, z));
+      for (let y = groundY + 1; y <= groundY + 4; y += 1) this.clearAt(x, y, z);
     }
     const doorZ = entranceSide === "north" ? minZ : maxZ;
     for (let x = minX; x <= maxX; x += 1) for (let z = minZ; z <= maxZ; z += 1) {

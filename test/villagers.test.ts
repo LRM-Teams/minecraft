@@ -19,7 +19,12 @@ const worldWithVillage = (): VoxelWorld => {
   let world: VoxelWorld | undefined;
   for (let seed = 1; seed <= 500 && !world; seed += 1) {
     const candidate = new VoxelWorld(seed, 48);
-    if (candidate.villages.length) { world = candidate; break; }
+    if (candidate.villages.length) {
+      // Eager-fill the logical size so pathing tests have solid ground outside the spawn ring.
+      candidate.ensureRadius(0, 0, candidate.size);
+      world = candidate;
+      break;
+    }
   }
   if (!world) throw new Error("no seed produced a village for the test");
   return world;

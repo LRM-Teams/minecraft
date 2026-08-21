@@ -65,7 +65,7 @@ import { breakDuration, canHarvestDrop, isMineable, miningDropItem } from "./min
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
-import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
+import { BLOCK_TYPES, CHUNK_SIZE, MAX_BUILD_Y, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import {
   chunkIdOf,
   nextPerfPreset,
@@ -631,12 +631,32 @@ const blockMaterial = (type: BlockType, tint: THREE.Color = ONE_WHITE): THREE.Ma
   return BOX_FACES.map((face) => (face === "top" ? top : face === "bottom" ? bottom : side));
 };
 
+/** Shared materials across chunks — remesh must not dispose these. */
+const blockMaterialCache = new Map<string, THREE.Material[]>();
+const cachedBlockMaterial = (type: BlockType, tint: THREE.Color): THREE.Material[] => {
+  const cacheKey = `${type}:${tint.getHexString()}`;
+  let mats = blockMaterialCache.get(cacheKey);
+  if (!mats) {
+    mats = blockMaterial(type, tint);
+    blockMaterialCache.set(cacheKey, mats);
+  }
+  return mats;
+};
+
 type BlockMeshBucket = { type: BlockType; tint: THREE.Color; positions: BlockPosition[] };
 
 const disposeMesh = (mesh: THREE.InstancedMesh): void => {
   scene.remove(mesh);
-  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  materials.forEach((material) => material.dispose());
+  // Materials are shared via blockMaterialCache — do not dispose.
+};
+
+/** Fixed chunk AABB sphere — cheaper than InstancedMesh.computeBoundingSphere(). */
+const chunkBoundingSphere = (cx: number, cz: number): THREE.Sphere => {
+  const half = CHUNK_SIZE * 0.5;
+  return new THREE.Sphere(
+    new THREE.Vector3(cx * CHUNK_SIZE + half, MAX_BUILD_Y * 0.5, cz * CHUNK_SIZE + half),
+    Math.hypot(half, MAX_BUILD_Y * 0.5, half) + 1.5,
+  );
 };
 
 const applyBlockInstanceMatrix = (
@@ -798,16 +818,16 @@ class BlockRenderer {
     buckets.forEach((bucket, key) => {
       const { type, tint, positions } = bucket;
       if (!positions.length) return;
-      const mesh = new THREE.InstancedMesh(box, blockMaterial(type, tint), positions.length);
+      const mesh = new THREE.InstancedMesh(box, cachedBlockMaterial(type, tint), positions.length);
       mesh.castShadow = this.terrainCastShadow && !NO_CAST_SHADOW.has(type);
       mesh.receiveShadow = this.terrainReceiveShadow;
       mesh.frustumCulled = true;
+      mesh.boundingSphere = chunkBoundingSphere(cx, cz);
       positions.forEach((position, index) => {
         applyBlockInstanceMatrix(type, key, position, index, mesh);
       });
       applyBucketMaterialWash(mesh, type, key);
       mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
       mesh.userData.positions = positions;
       mesh.userData.blockType = type;
       mesh.userData.chunkId = id;
@@ -1789,8 +1809,13 @@ const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
   const meshRadius = perf.meshChunkRadius;
   if (dimension === "overworld") {
-    // Stream terrain; do NOT force a full remesh — new chunks enqueue and build throttled.
-    world.ensureAround(camera.position.x, camera.position.z, perf.streamChunkRadius);
+    // At most N new terrain chunks per frame — never gen a full ring in one longtask.
+    world.ensureAround(
+      camera.position.x,
+      camera.position.z,
+      perf.streamChunkRadius,
+      perf.maxChunkGensPerFrame,
+    );
   }
   const sameChunk = chunkX === loadedChunkX && chunkZ === loadedChunkZ;
   if (dimension === "nether") {
@@ -1810,10 +1835,22 @@ const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
     return;
   }
   if (dirtyAt) blocks.invalidateAt(dirtyAt.x, dirtyAt.y, dirtyAt.z);
-  if (force) {
+  if (force && dirtyAt) {
+    // Place/break: remesh only dirty neighbourhood this frame.
     blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
       flush: true,
-      remeshAll: !dirtyAt,
+      remeshAll: false,
+    });
+    overworldPortal.rebuild(portalEntriesNear());
+    loadedChunkX = chunkX;
+    loadedChunkZ = chunkZ;
+    return;
+  }
+  if (force) {
+    // Texture / dimension reload: enqueue all desired chunks, pump budget this frame.
+    blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
+      remeshAll: true,
+      maxBuilds: perf.maxChunkBuildsPerFrame,
     });
     overworldPortal.rebuild(portalEntriesNear());
     loadedChunkX = chunkX;

@@ -14,6 +14,8 @@ export type PerfConfig = {
   streamChunkRadius: number;
   /** Chunks meshed around the player (square radius). */
   meshChunkRadius: number;
+  /** Max new terrain chunks generated per frame via ensureAround. */
+  maxChunkGensPerFrame: number;
   /** Max chunk mesh builds (create InstancedMesh) per animation frame. */
   maxChunkBuildsPerFrame: number;
   /** Directional + terrain shadow maps. */
@@ -38,8 +40,9 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     id: "performance",
     label: "性能",
     streamChunkRadius: 2,
-    meshChunkRadius: 2,
-    maxChunkBuildsPerFrame: 2,
+    meshChunkRadius: 1,
+    maxChunkGensPerFrame: 1,
+    maxChunkBuildsPerFrame: 1,
     shadowsEnabled: false,
     shadowMapSize: 512,
     softShadows: false,
@@ -55,7 +58,8 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     label: "均衡",
     streamChunkRadius: 2,
     meshChunkRadius: 2,
-    maxChunkBuildsPerFrame: 3,
+    maxChunkGensPerFrame: 1,
+    maxChunkBuildsPerFrame: 1,
     shadowsEnabled: false,
     shadowMapSize: 512,
     softShadows: false,
@@ -71,7 +75,8 @@ export const PERF_PRESETS: Record<PerfPresetId, PerfConfig> = {
     label: "画质",
     streamChunkRadius: 3,
     meshChunkRadius: 2,
-    maxChunkBuildsPerFrame: 6,
+    maxChunkGensPerFrame: 2,
+    maxChunkBuildsPerFrame: 2,
     shadowsEnabled: true,
     shadowMapSize: 1024,
     softShadows: true,
