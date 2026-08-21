@@ -32,8 +32,8 @@ export type Recipe = {
 
 const cell = (value: CraftCell): CraftCell => value;
 
-/** Vanilla armor shapes for leather / iron (and any future material). */
-const armorSet = (tier: "leather" | "iron", material: ItemType): Recipe[] => {
+/** Vanilla armor shapes for leather / iron / diamond. */
+const armorSet = (tier: "leather" | "iron" | "diamond", material: ItemType): Recipe[] => {
   const helmet = `${tier}_helmet` as ExtraItem;
   const chest = `${tier}_chestplate` as ExtraItem;
   const legs = `${tier}_leggings` as ExtraItem;
@@ -339,6 +339,7 @@ export const RECIPES: readonly Recipe[] = [
   ...toolSet("diamond", "diamond"),
   ...armorSet("leather", "leather"),
   ...armorSet("iron", "iron_ingot"),
+  ...armorSet("diamond", "diamond"),
 ];
 
 export const ALL_RECIPES: readonly Recipe[] = RECIPES;
@@ -683,6 +684,10 @@ const NON_TOOL_EXTRAS = new Set([
   "iron_chestplate",
   "iron_leggings",
   "iron_boots",
+  "diamond_helmet",
+  "diamond_chestplate",
+  "diamond_leggings",
+  "diamond_boots",
   "lapis_lazuli",
   "sugar_cane",
   "paper",

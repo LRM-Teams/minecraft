@@ -61,7 +61,7 @@ import {
   tryPickupDrops,
   type DroppedItem,
 } from "./drops";
-import { breakDuration, isMineable } from "./mining";
+import { breakDuration, canHarvestDrop, isMineable, miningDropItem } from "./mining";
 import { Soundscape } from "./sound";
 import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, loadWorldSlot, renameWorldSlot, saveWorldSlot, type PlayerSave, type WorldSlot } from "./storage";
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
@@ -213,7 +213,7 @@ app.innerHTML = `
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
     <div id="held-icon" aria-hidden="true"></div>
-    <div id="hint">点击进入世界 · WASD 无限探索 · 空格跳跃 · Shift 冲刺 · Ctrl 潜行 · 左键挖掘 · 右键放置 · 1–9 热键 · E 背包 · Q 丢弃 · R 工具 · G 图鉴</div>
+    <div id="hint">点击进入 · 洞窟挖矿→熔炉烧锭→装备/火把 · WASD · 空格跳 · Shift冲刺 · Ctrl潜行 · 左键挖 · 右键放 · E背包 · G图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
@@ -224,17 +224,18 @@ app.innerHTML = `
     <aside id="codex" class="hidden">
       <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
       <p>对标原版：<kbd>E</kbd> 打开完整背包格子（可拖拽）与 2×2 合成；放置工作台后右键开 3×3；<kbd>Q</kbd> 丢弃手持物品，靠近自动拾取。</p>
-      <p>流程：原木→木板→木棍→工作台→熔炉→烧锭→铁/金/钻工具；煤/木炭+木棍→火把；羊毛×3+木板×3→床。</p>
+      <p>流程：洞窟挖矿（煤/铁/铜/金/钻，世界六面贴图）→熔炉烧锭→铁/金/钻工具与护甲；煤/木炭+木棍→火把；黑曜石需钻石镐；羊毛×3+木板×3→床。</p>
       <div class="recipe"><kbd>C</kbd> 原木 → 木板 ×4（快捷）</div>
       <div class="recipe"><kbd>V</kbd> 石头 ×4 → 石砖 ×4（快捷）</div>
       <div class="recipe"><kbd>F</kbd> 玻璃需熔炉烧沙子（快捷已禁用）</div>
       <div class="recipe">火把：煤/木炭 + 木棍 → ×4（可放置照明）</div>
+      <div class="recipe">镐门槛：木镐采煤/石；石镐采铁铜青金；铁镐采金钻红石；钻石镐采黑曜石（不够级可挖无掉落）</div>
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
       <div class="recipe">木门：木板×6 → ×3（工作台）· 放置后右键开关，关闭时挡路</div>
       <div class="recipe">梯子：木棍×7（H 形，工作台）→ ×3 · 贴墙放置，贴着可攀爬上下</div>
       <div class="recipe">操控：<kbd>Shift</kbd> 冲刺（饱食&gt;6）· <kbd>Ctrl</kbd> 潜行（减速+边缘防坠；与冲刺互斥）</div>
       <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食/喝药</div>
-      <div class="recipe">护甲：皮革/铁锭工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
+      <div class="recipe">护甲：皮革/铁锭/钻石工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
       <div class="recipe">附魔：甘蔗×3→纸；纸×3+皮革→书；书+钻石×2+黑曜石×4→附魔台；书架环绕增强；青金石+经验附魔锋利/保护/效率</div>
       <div class="recipe">酿造：烈焰棒+石头×3→酿造台；玻璃×3→玻璃瓶；甘蔗→糖；烈焰棒→烈焰粉×2；金锭+苹果→闪烁西瓜；水瓶+下界疣→粗制；再加西瓜/糖/蜘蛛眼→治疗/迅捷/剧毒</div>
       <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/酿造台/床/木门/村民交互。幽火掉烈焰棒与下界疣；潜行者掉蜘蛛眼。</p>
@@ -2180,7 +2181,10 @@ const edit = (place: boolean): void => {
       const removed = world.remove(target.position);
       if (removed) {
         const pos = target.position;
-        if (removed === "lapis_ore") {
+        const harvested = canHarvestDrop(removed, stations.equippedTool);
+        if (!harvested) {
+          status.textContent = `${labels[removed]}需要更高等级镐才能掉落`;
+        } else if (removed === "lapis_ore") {
           const count = lapisDropCount(world.seed, pos.x, pos.y, pos.z);
           inventory.lapis_lazuli += count;
           status.textContent = `获得青金石 ×${count}`;
@@ -2189,7 +2193,11 @@ const edit = (place: boolean): void => {
           inventory.redstone_dust += count;
           status.textContent = `获得红石粉 ×${count}`;
         } else {
-          inventory[removed] += 1;
+          const drop = miningDropItem(removed);
+          if (drop) {
+            inventory[drop] += 1;
+            if (drop !== removed) status.textContent = `获得 ${ITEM_LABELS[drop]}`;
+          }
         }
         if (removed === "lever") clearLeverAt(leverStates, pos);
         if (removed === "chest") {
@@ -2215,7 +2223,7 @@ const edit = (place: boolean): void => {
             status.textContent = "获得甘蔗";
           }
         }
-        const gained = miningXpFor(removed);
+        const gained = harvested ? miningXpFor(removed) : 0;
         if (gained > 0) {
           addExperience(enchantState.experience, gained);
           renderXp();
@@ -2282,10 +2290,13 @@ const updateMining = (delta: number): void => {
     miningKey = key;
     miningProgress = 0;
   }
-  const mineDuration = breakDuration(block, stations.equippedTool) / (isPickaxe(stations.equippedTool ?? undefined) ? efficiencyMultiplier(equippedEnchantments()) : 1);
+  const suitedPick = canHarvestDrop(block, stations.equippedTool);
+  const mineDuration = breakDuration(block, stations.equippedTool) / (isPickaxe(stations.equippedTool ?? undefined) && suitedPick ? efficiencyMultiplier(equippedEnchantments()) : 1);
   miningProgress = Math.min(1, miningProgress + delta / mineDuration);
   crackOverlay.set(miningProgress, target.position);
-  status.textContent = `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`;
+  status.textContent = suitedPick
+    ? `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`
+    : `挖掘 ${labels[block]}（镐不够级，无掉落）· ${Math.round(miningProgress * 100)}%`;
   if (miningProgress >= 1) {
     edit(false);
     stopMining();

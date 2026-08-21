@@ -260,11 +260,14 @@ export class VoxelWorld {
   /**
    * Carve deterministic underground cavities and connecting tunnels out of the
    * buried stone within the given column bounds.
+   * Depth band mirrors a compressed JE cave layer (Y≈1–14 under typical surface).
    */
   private carveCavesInBounds(minX: number, maxX: number, minZ: number, maxZ: number): void {
     for (let x = minX; x <= maxX; x += 1) {
       for (let z = minZ; z <= maxZ; z += 1) {
-        for (let y = 2; y <= 9; y += 1) {
+        const top = this.topY(x, z);
+        const maxCaveY = Math.min(14, Math.max(3, top - 2));
+        for (let y = 2; y <= maxCaveY; y += 1) {
           const cavity =
             Math.sin((x + this.seed * 0.7) * 0.31) *
             Math.cos((z - this.seed * 0.3) * 0.37) *
@@ -273,7 +276,7 @@ export class VoxelWorld {
             Math.abs(Math.sin((x * 0.9 + z * 0.5 + y * 0.7 + this.seed) * 1.35)) < 0.42 &&
             hash(x + y, z + y * 2, this.seed) > 0.42 &&
             y > 3;
-          if ((cavity > 0.62 || tunnel) && !this.isSupportColumn(x, y - 1, z)) {
+          if ((cavity > 0.58 || tunnel) && !this.isSupportColumn(x, y - 1, z)) {
             this.blocks.delete(key(x, y, z));
           }
         }
@@ -288,24 +291,49 @@ export class VoxelWorld {
     return false;
   }
 
+  private touchesAir(x: number, y: number, z: number): boolean {
+    for (const n of NEIGHBORS) {
+      if (!this.get(x + n.x, y + n.y, z + n.z)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Scatter mineral ores with wiki-readable depth / rarity (compressed to our Y band):
+   * coal common mid-high · copper mid · iron mid-deep · gold/redstone deep · diamond deepest.
+   * Cave walls get a density boost so caves reliably expose mineable veins.
+   * Obsidian is not scattered as an "ore" (portal frames / player-placed only).
+   */
   private scatterOresInBounds(minX: number, maxX: number, minZ: number, maxZ: number): void {
+    type OreBand = { type: BlockType; minY: number; maxY: number; base: number; caveBonus: number };
+    // Probabilities tuned so coal ≫ copper ≫ iron ≫ gold ≫ diamond across a size=48 world.
+    const bands: readonly OreBand[] = [
+      { type: "diamond_ore", minY: 1, maxY: 3, base: 0.014, caveBonus: 0.05 },
+      { type: "gold_ore", minY: 1, maxY: 5, base: 0.028, caveBonus: 0.06 },
+      { type: "redstone_ore", minY: 1, maxY: 5, base: 0.03, caveBonus: 0.05 },
+      { type: "lapis_ore", minY: 1, maxY: 7, base: 0.032, caveBonus: 0.055 },
+      { type: "iron_ore", minY: 1, maxY: 8, base: 0.07, caveBonus: 0.1 },
+      { type: "copper_ore", minY: 2, maxY: 10, base: 0.09, caveBonus: 0.11 },
+      { type: "coal_ore", minY: 2, maxY: 12, base: 0.14, caveBonus: 0.14 },
+    ];
     const oreAt = (x: number, y: number, z: number): BlockType | undefined => {
       if (this.get(x, y, z) !== "stone") return undefined;
-      const depth = y;
+      const cave = this.touchesAir(x, y, z);
       const roll = hash(x + 31, z - 17, this.seed + y * 7);
-      if (depth <= 2 && roll < 0.012) return "diamond_ore";
-      if (depth <= 5 && roll < 0.035) return "lapis_ore";
-      if (depth <= 6 && roll < 0.04) return "redstone_ore";
-      if (depth <= 3 && roll < 0.02) return "obsidian";
-      if (depth <= 4 && roll < 0.05) return "gold_ore";
-      if (depth <= 6 && roll < 0.11) return "iron_ore";
-      if (depth <= 8 && roll < 0.18) return "copper_ore";
-      if (roll < 0.26) return "coal_ore";
+      for (const band of bands) {
+        if (y < band.minY || y > band.maxY) continue;
+        const chance = band.base + (cave ? band.caveBonus : 0);
+        // Offset hash per ore so rarer ores are not always shadowed by coal.
+        const oreRoll = hash(x + band.minY * 13, z - band.maxY * 3, this.seed + y * 7 + band.type.length * 19);
+        if (oreRoll < chance && roll < 0.92) return band.type;
+      }
       return undefined;
     };
     for (let x = minX; x <= maxX; x += 1) {
       for (let z = minZ; z <= maxZ; z += 1) {
-        for (let y = 1; y <= 8; y += 1) {
+        const top = this.topY(x, z);
+        const maxOreY = Math.min(12, Math.max(1, top - 2));
+        for (let y = 1; y <= maxOreY; y += 1) {
           const ore = oreAt(x, y, z);
           if (ore) this.set({ x, y, z }, ore);
         }
