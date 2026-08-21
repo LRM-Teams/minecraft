@@ -1,9 +1,59 @@
 import * as THREE from "three";
 import type { ItemType } from "./items";
 import { isBlockType, isSword, isTool } from "./items";
+import manifestJson from "../assets/viewmodel/manifest.json";
 
 /** Destroy-stage count (vanilla-ish 0..9). */
 export const CRACK_STAGES = 10;
+
+type ViewmodelManifest = {
+  crack_stages: number;
+  textures: {
+    hand_skin: string;
+    sleeve: string;
+    destroy_stages: string[];
+  };
+  viewmodel: {
+    camera_anchor: { x: number; y: number; z: number };
+    arm_box: { size: number[]; local: number[] };
+    hand_box: { size: number[]; local: number[] };
+    held_anchor: { local: number[] };
+    materials: {
+      arm: { map: string; fallback_color: string };
+      hand: { map: string; fallback_color: string };
+    };
+  };
+};
+
+const manifest = manifestJson as ViewmodelManifest;
+
+const pngUrls = import.meta.glob("../assets/viewmodel/*.png", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+
+const urlFor = (filename: string): string | null => {
+  const key = `../assets/viewmodel/${filename}`;
+  return pngUrls[key] ?? null;
+};
+
+const loadMap = (filename: string, onReady?: () => void): THREE.Texture | null => {
+  const url = urlFor(filename);
+  if (!url) return null;
+  const loader = new THREE.TextureLoader();
+  const tex = loader.load(url, () => onReady?.());
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  return tex;
+};
+
+const parseHex = (hex: string, fallback: number): number => {
+  const cleaned = hex.replace("#", "");
+  const n = Number.parseInt(cleaned, 16);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 /** Map continuous mining progress [0,1) → discrete crack stage; 1 → last stage. */
 export const crackStageForProgress = (progress: number): number => {
@@ -12,7 +62,7 @@ export const crackStageForProgress = (progress: number): number => {
   return Math.min(CRACK_STAGES - 1, Math.floor(progress * CRACK_STAGES));
 };
 
-/** Procedural crack overlay texture for a destroy stage. */
+/** Procedural fallback when destroy-stage PNGs are missing. */
 export const makeCrackTexture = (stage: number): THREE.CanvasTexture => {
   const canvas = document.createElement("canvas");
   canvas.width = 16;
@@ -70,36 +120,50 @@ export const heldKind = (item: ItemType | null | undefined, equippedTool: ItemTy
   return { kind: "item", display: item };
 };
 
-const skinMat = () => new THREE.MeshLambertMaterial({ color: 0xd4a574 });
-const sleeveMat = () => new THREE.MeshLambertMaterial({ color: 0x3d6ea5 });
-
 export type ViewmodelController = {
   root: THREE.Group;
   setHeld: (item: ItemType | null, equippedTool: ItemType | null, blockColor?: number) => void;
-  /** `swing` 0..1 mining/attack pulse; `active` when LMB held. */
   tick: (delta: number, active: boolean) => void;
   dispose: () => void;
 };
 
 /**
  * First-person right-hand viewmodel parented to the camera.
- * Procedural placeholder until man delivers art (LRM-1605).
+ * Uses LRM-1605 `assets/viewmodel` maps when present.
  */
 export const createViewmodel = (): ViewmodelController => {
+  const vm = manifest.viewmodel;
   const root = new THREE.Group();
   root.name = "fp-viewmodel";
-  root.position.set(0.28, -0.32, -0.42);
+  root.position.set(vm.camera_anchor.x, vm.camera_anchor.y, vm.camera_anchor.z);
+
+  const sleeveTex = loadMap(vm.materials.arm.map);
+  const handTex = loadMap(vm.materials.hand.map);
+  const sleeve = new THREE.MeshLambertMaterial({
+    color: parseHex(vm.materials.arm.fallback_color, 0x3d6ea5),
+    map: sleeveTex,
+  });
+  const skin = new THREE.MeshLambertMaterial({
+    color: parseHex(vm.materials.hand.fallback_color, 0xd4a574),
+    map: handTex,
+  });
 
   const arm = new THREE.Group();
-  const upper = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.12), sleeveMat());
-  upper.position.set(0, -0.06, 0.02);
-  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.14), skinMat());
-  hand.position.set(0, -0.24, 0.04);
+  const upper = new THREE.Mesh(
+    new THREE.BoxGeometry(vm.arm_box.size[0], vm.arm_box.size[1], vm.arm_box.size[2]),
+    sleeve,
+  );
+  upper.position.set(vm.arm_box.local[0], vm.arm_box.local[1], vm.arm_box.local[2]);
+  const hand = new THREE.Mesh(
+    new THREE.BoxGeometry(vm.hand_box.size[0], vm.hand_box.size[1], vm.hand_box.size[2]),
+    skin,
+  );
+  hand.position.set(vm.hand_box.local[0], vm.hand_box.local[1], vm.hand_box.local[2]);
   arm.add(upper, hand);
   root.add(arm);
 
   const heldAnchor = new THREE.Group();
-  heldAnchor.position.set(0.02, -0.28, -0.02);
+  heldAnchor.position.set(vm.held_anchor.local[0], vm.held_anchor.local[1], vm.held_anchor.local[2]);
   root.add(heldAnchor);
 
   let heldMesh: THREE.Object3D | null = null;
@@ -172,19 +236,18 @@ export const createViewmodel = (): ViewmodelController => {
       swingPhase = 0;
     }
     const swing = swinging || active ? Math.sin(Math.min(swingPhase, Math.PI)) : 0;
-    // Idle bob
     const bob = Math.sin(performance.now() * 0.004) * 0.008;
-    root.position.set(0.28, -0.32 + bob, -0.42);
+    root.position.set(vm.camera_anchor.x, vm.camera_anchor.y + bob, vm.camera_anchor.z);
     root.rotation.set(swing * 0.55, -0.08 + swing * 0.15, swing * 0.35);
     arm.rotation.x = swing * 0.85;
   };
 
   const dispose = (): void => {
     clearHeld();
-    root.traverse((obj) => {
-      const mesh = obj as THREE.Mesh;
-      if (mesh.geometry && mesh !== heldMesh) mesh.geometry.dispose?.();
-    });
+    sleeve.dispose();
+    skin.dispose();
+    sleeveTex?.dispose();
+    handTex?.dispose();
   };
 
   return { root, setHeld, tick, dispose };
@@ -196,12 +259,12 @@ export type CrackOverlay = {
   dispose: () => void;
 };
 
-/** Cube-sized crack overlay aligned to the targeted block. */
+/** Cube-sized crack overlay aligned to the targeted block (LRM-1605 destroy stages). */
 export const createCrackOverlay = (): CrackOverlay => {
   const geometry = new THREE.BoxGeometry(1.02, 1.02, 1.02);
   const material = new THREE.MeshBasicMaterial({
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.92,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -2,
@@ -209,8 +272,11 @@ export const createCrackOverlay = (): CrackOverlay => {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.visible = false;
   mesh.renderOrder = 12;
-  const stageTextures: THREE.CanvasTexture[] = [];
-  for (let s = 0; s < CRACK_STAGES; s += 1) stageTextures.push(makeCrackTexture(s));
+  const stageTextures: THREE.Texture[] = [];
+  for (let s = 0; s < CRACK_STAGES; s += 1) {
+    const file = manifest.textures.destroy_stages[s] ?? `destroy_stage_${s}.png`;
+    stageTextures.push(loadMap(file) ?? makeCrackTexture(s));
+  }
   let lastStage = -2;
 
   const set = (progress: number, position: { x: number; y: number; z: number } | null): void => {
