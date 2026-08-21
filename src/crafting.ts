@@ -170,6 +170,43 @@ export const RECIPES: readonly Recipe[] = [
     ],
     result: { item: "bed", count: 1 },
   },
+  // Vanilla paper: three sugar cane in a row.
+  {
+    id: "paper",
+    width: 3,
+    pattern: [cell("sugar_cane"), cell("sugar_cane"), cell("sugar_cane")],
+    result: { item: "paper", count: 3 },
+  },
+  // Vanilla book: three paper + one leather (shapeless).
+  {
+    id: "book",
+    width: 2,
+    pattern: [cell("paper"), cell("paper"), cell("paper"), cell("leather")],
+    result: { item: "book", count: 1 },
+    shapeless: true,
+  },
+  // Vanilla enchanting table: book / diamond+obsidian+diamond / 3 obsidian.
+  {
+    id: "enchanting_table",
+    width: 3,
+    pattern: [
+      cell(null), cell("book"), cell(null),
+      cell("diamond"), cell("obsidian"), cell("diamond"),
+      cell("obsidian"), cell("obsidian"), cell("obsidian"),
+    ],
+    result: { item: "enchanting_table", count: 1 },
+  },
+  // Vanilla bookshelf: 3 books over/mid 6 planks.
+  {
+    id: "bookshelf",
+    width: 3,
+    pattern: [
+      cell("planks"), cell("planks"), cell("planks"),
+      cell("book"), cell("book"), cell("book"),
+      cell("planks"), cell("planks"), cell("planks"),
+    ],
+    result: { item: "bookshelf", count: 1 },
+  },
   // Vanilla bread: three wheat in a row (crafting table).
   {
     id: "bread",
@@ -371,6 +408,10 @@ const NON_TOOL_EXTRAS = new Set([
   "iron_chestplate",
   "iron_leggings",
   "iron_boots",
+  "lapis_lazuli",
+  "sugar_cane",
+  "paper",
+  "book",
 ]);
 
 export const isToolItem = (item: ItemType): boolean =>

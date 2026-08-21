@@ -19,7 +19,7 @@ import { createWorldSlot, deleteWorldSlot, listWorldSlots, loadActiveWorld, load
 import { MultiplayerRoom, newPlayer, normalizeRoomCode, type PlayerState } from "./multiplayer";
 import { BLOCK_TYPES, CHUNK_SIZE, type BlockPosition, type BlockType, type WorldSnapshot, VoxelWorld } from "./world";
 import { biomeAt, type BiomeVariant } from "./biomes";
-import { ITEM_LABELS, SWORD_DAMAGE, isTool, type ExtraItem } from "./items";
+import { ITEM_LABELS, SWORD_DAMAGE, isPickaxe, isSword, isTool, type ExtraItem } from "./items";
 import {
   EXHAUSTION,
   FOOD_DEFS,
@@ -43,26 +43,50 @@ import {
   createArmorState,
   formatArmorBar,
   mitigateDamage,
+  armorSlotOf,
+  isArmorPiece,
   snapshotArmor,
   totalArmorPoints,
   type ArmorState,
 } from "./armor";
+import {
+  MOB_KILL_XP,
+  addExperience,
+  countBookshelfPower,
+  createEnchantSaveState,
+  efficiencyMultiplier,
+  findGear,
+  formatEnchantments,
+  formatXpBar,
+  lapisDropCount,
+  miningXpFor,
+  mitigateWithProtection,
+  removeGear,
+  sharpnessBonus,
+  snapshotEnchant,
+  type Enchantment,
+  type EnchantedItem,
+} from "./enchanting";
 import { createDayClock, dayProgress, sunHeightAt, type DayClock } from "./daycycle";
 import { breakBedAt, hostileWithinSleepRange, placeBedPair, trySleepInBed } from "./bed";
 import { TORCH_LIGHT, canPlaceTorchAt, torchesNear } from "./torch";
 import {
+  activeFurnace,
   closeCraft,
+  closeEnchant,
   closeFurnace,
   createStations,
   handleCraftClick,
+  handleEnchantClick,
   handleFurnaceClick,
+  openEnchantAt,
   openFurnaceAt,
   openInventoryCraft,
   openTableCraft,
   renderCraftPanelHtml,
+  renderEnchantPanelHtml,
   renderFurnacePanelHtml,
   tickAllFurnaces,
-  activeFurnace,
 } from "./stations";
 import {
   createPortalLink,
@@ -95,6 +119,7 @@ app.innerHTML = `
     <div id="health"></div>
     <div id="hunger"></div>
     <div id="armor"></div>
+    <div id="xp"></div>
     <div id="audio-state"></div>
     <div id="network-state"></div>
     <div id="village-state"></div>
@@ -105,11 +130,12 @@ app.innerHTML = `
     <div id="wither-state"></div>
     <div id="wither-star"></div>
     <div id="crosshair">+</div>
-    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉/睡床 · E 合成 · R 工具 · T 进食 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
+    <div id="hint">点击进入世界 · WASD 移动 · 空格跳跃 · 左键挖掘/攻击 · 右键放置/开工作台熔炉附魔台/睡床 · E 合成 · R 工具 · T 进食 · N 传送门 · B 末地 · H 凋灵 · G 图鉴</div>
     <div id="status"></div>
     <div id="hotbar"></div>
     <div id="craft-panel" class="station-panel hidden"></div>
     <div id="furnace-panel" class="station-panel hidden"></div>
+    <div id="enchant-panel" class="station-panel hidden"></div>
     <aside id="codex" class="hidden">
       <div class="codex-title">生存图鉴 <small>G 关闭</small></div>
       <p>对标原版：背包 <kbd>E</kbd> 开 2×2 合成；放置工作台后右键开 3×3；熔炉烧炼矿石/沙子。</p>
@@ -121,7 +147,8 @@ app.innerHTML = `
       <div class="recipe">床：羊毛×3 + 木板×3（工作台）· 夜间右键跳过到早晨并设重生点</div>
       <div class="recipe">饥饿：行动耗尽饱食；树叶掉苹果、草方块掉小麦；小麦×3→面包；生牛肉熔炉→熟牛排；T 进食</div>
       <div class="recipe">护甲：皮革/铁锭工作台合成头盔·胸甲·护腿·靴子；E 面板装备；减伤对标原版；蛮牛掉皮革</div>
-      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/床/村民交互。羊毛可在村庄屋内取得。</p>
+      <div class="recipe">附魔：甘蔗×3→纸；纸×3+皮革→书；书+钻石×2+黑曜石×4→附魔台；书架环绕增强；青金石+经验附魔锋利/保护/效率</div>
+      <p class="codex-note">数字键切换方块；R 循环手持工具；右键工作台/熔炉/附魔台/床/村民交互。羊毛可在村庄屋内取得。</p>
     </aside>
   </div>
   <div id="start-screen">
@@ -235,14 +262,18 @@ const colors: Record<BlockType, number> = {
   iron_ore: 0xc9a06a,
   gold_ore: 0xe8c94c,
   diamond_ore: 0x5ad2d0,
+  lapis_ore: 0x1f4fd8,
+  obsidian: 0x2b2333,
   crafting_table: 0xb8874c,
   furnace: 0x6a6e72,
+  enchanting_table: 0x5a2a6e,
+  bookshelf: 0x8b5a2b,
   torch: 0xffc15a,
   wool: 0xf0ebe3,
   bed: 0xc43c3c,
 };
 const labels: Record<BlockType, string> = {
-  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", crafting_table: "工作台", furnace: "熔炉", torch: "火把", wool: "羊毛", bed: "床",
+  grass: "草方块", dirt: "泥土", stone: "石头", wood: "原木", planks: "木板", leaves: "树叶", sand: "沙子", water: "水", bricks: "石砖", glass: "玻璃", coal_ore: "煤矿石", copper_ore: "铜矿石", iron_ore: "铁矿石", gold_ore: "金矿石", diamond_ore: "钻石矿石", lapis_ore: "青金石矿", obsidian: "黑曜石", crafting_table: "工作台", furnace: "熔炉", enchanting_table: "附魔台", bookshelf: "书架", torch: "火把", wool: "羊毛", bed: "床",
 };
 
 /** Original hell palette for the nether dimension's module-internal blocks. */
@@ -315,7 +346,7 @@ const blockTexture = (type: BlockType, face: BlockFace = "side"): THREE.CanvasTe
     }
   } else if (type === "grass" && face === "bottom") {
     paint(new THREE.Color(colors.dirt));
-  } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore") {
+  } else if (type === "coal_ore" || type === "copper_ore" || type === "iron_ore" || type === "gold_ore" || type === "diamond_ore" || type === "lapis_ore") {
     // Ores: stone host rock with a bright mineral core and scattered flecks.
     paint(new THREE.Color(colors.stone));
     for (let y = 2; y < 16; y += 3) for (let x = 2; x < 16; x += 3) {
@@ -1170,6 +1201,7 @@ const timeText = document.querySelector<HTMLDivElement>("#world-time")!;
 const healthText = document.querySelector<HTMLDivElement>("#health")!;
 const hungerText = document.querySelector<HTMLDivElement>("#hunger")!;
 const armorText = document.querySelector<HTMLDivElement>("#armor")!;
+const xpText = document.querySelector<HTMLDivElement>("#xp")!;
 const audioText = document.querySelector<HTMLDivElement>("#audio-state")!;
 const networkText = document.querySelector<HTMLDivElement>("#network-state")!;
 const villageText = document.querySelector<HTMLDivElement>("#village-state")!;
@@ -1192,10 +1224,12 @@ let inventory: Inventory = createInventory(saved?.player.inventory);
 const stations = createStations();
 const craftPanel = document.querySelector<HTMLDivElement>("#craft-panel")!;
 const furnacePanel = document.querySelector<HTMLDivElement>("#furnace-panel")!;
+const enchantPanel = document.querySelector<HTMLDivElement>("#enchant-panel")!;
 const maxPlayerHealth = 10;
 let playerHealth = maxPlayerHealth;
 let hunger: HungerState = createHungerState(saved?.player.hunger);
 let armor: ArmorState = createArmorState(saved?.player.armor);
+let enchantState = createEnchantSaveState(saved?.player.enchanting);
 const soundscape = new Soundscape();
 let yaw = saved?.player.yaw ?? 0;
 let pitch = saved?.player.pitch ?? -0.18;
@@ -1302,14 +1336,20 @@ renderHotbar();
 const refreshStationsUi = (): void => {
   craftPanel.classList.toggle("hidden", !stations.craftOpen);
   furnacePanel.classList.toggle("hidden", !stations.furnaceOpen);
+  enchantPanel.classList.toggle("hidden", !stations.enchantOpen);
   if (stations.craftOpen) craftPanel.innerHTML = renderCraftPanelHtml(stations, inventory, armor);
   if (stations.furnaceOpen) {
     const furnace = activeFurnace(stations);
     if (furnace) furnacePanel.innerHTML = renderFurnacePanelHtml(furnace, inventory);
   }
+  if (stations.enchantOpen) {
+    enchantPanel.innerHTML = renderEnchantPanelHtml(stations, inventory, enchantState.experience, enchantState.gear);
+  }
 };
 
-const anyStationOpen = (): boolean => stations.craftOpen || stations.furnaceOpen;
+const anyStationOpen = (): boolean => stations.craftOpen || stations.furnaceOpen || stations.enchantOpen;
+
+const equippedEnchantments = () => findGear(enchantState.gear, enchantState.equippedToolUid)?.enchantments ?? [];
 
 const releasePointerForUi = (): void => {
   if (document.pointerLockElement) document.exitPointerLock();
@@ -1327,13 +1367,24 @@ renderHunger();
 
 const renderArmor = (): void => {
   const points = totalArmorPoints(armor);
-  armorText.textContent = `护甲 ${formatArmorBar(points)} ${points}/20`;
+  const prot = Object.values(enchantState.armorEnchants).flat().filter((e) => e.id === "protection");
+  const protLabel = prot.length ? ` · ${formatEnchantments(prot)}` : "";
+  armorText.textContent = `护甲 ${formatArmorBar(points)} ${points}/20${protLabel}`;
 };
 renderArmor();
 
+const renderXp = (): void => {
+  const xp = enchantState.experience;
+  const tool = findGear(enchantState.gear, enchantState.equippedToolUid);
+  const toolEnch = tool ? ` · ${formatEnchantments(tool.enchantments)}` : "";
+  xpText.textContent = `经验 Lv.${xp.level} ${formatXpBar(xp)}${toolEnch}`;
+};
+renderXp();
+
 /** Mitigate then subtract HP. Returns damage actually dealt (0 if fully blocked). */
 const applyIncomingDamage = (rawDamage: number): number => {
-  const dealt = mitigateDamage(armor, rawDamage);
+  const afterArmor = mitigateDamage(armor, rawDamage);
+  const dealt = mitigateWithProtection(enchantState.armorEnchants, afterArmor);
   if (dealt <= 0) return 0;
   playerHealth = Math.max(0, playerHealth - dealt);
   return dealt;
@@ -1469,6 +1520,7 @@ const playerSave = (): PlayerSave => ({
   dayPhaseMs: dayClock.phaseMs(),
   hunger: snapshotHunger(hunger),
   armor: snapshotArmor(armor),
+  enchanting: snapshotEnchant(enchantState),
 });
 const persist = (): void => {
   if (activeWorldId && saveWorldSlot(activeWorldId, world, playerSave())) {
@@ -1537,10 +1589,17 @@ const attackMobAtCrosshair = (): boolean => {
   if (mobId !== undefined) {
     const mob = mobs.find((candidate) => candidate.id === mobId && !candidate.dead);
     if (!mob) return false;
-    mob.hp = Math.max(0, mob.hp - (4 + (stations.equippedTool ? (SWORD_DAMAGE[stations.equippedTool] ?? 0) : 0)));
+    const baseDmg = 4 + (stations.equippedTool ? (SWORD_DAMAGE[stations.equippedTool] ?? 0) : 0);
+    const dmg = baseDmg + sharpnessBonus(equippedEnchantments());
+    mob.hp = Math.max(0, mob.hp - dmg);
     addExhaustion(hunger, EXHAUSTION.attack);
     renderHunger();
     soundscape.play("hit");
+    if (mob.hp <= 0) {
+      addExperience(enchantState.experience, MOB_KILL_XP);
+      renderXp();
+      dirty = true;
+    }
     status.textContent = mob.hp > 0 ? `命中${mobNames[mob.kind]} · ${mob.hp}/${mob.maxHp}` : `${mobNames[mob.kind]}已击倒`;
     return true;
   }
@@ -1600,8 +1659,14 @@ const edit = (place: boolean): void => {
     } else {
       const removed = world.remove(target.position);
       if (removed) {
-        inventory[removed] += 1;
         const pos = target.position;
+        if (removed === "lapis_ore") {
+          const count = lapisDropCount(world.seed, pos.x, pos.y, pos.z);
+          inventory.lapis_lazuli += count;
+          status.textContent = `获得青金石 ×${count}`;
+        } else {
+          inventory[removed] += 1;
+        }
         if (removed === "leaves" && appleDropFromLeaves(world.seed, pos.x, pos.y, pos.z)) {
           inventory.apple += 1;
           status.textContent = "树叶掉落了苹果";
@@ -1609,6 +1674,19 @@ const edit = (place: boolean): void => {
         if (removed === "grass" && wheatDropFromGrass(world.seed, pos.x, pos.y, pos.z)) {
           inventory.wheat += 1;
           status.textContent = "获得小麦";
+        }
+        if (removed === "grass") {
+          const nearWater = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx, dz]) =>
+            world.get(pos.x + dx, pos.y, pos.z + dz) === "water" || world.get(pos.x + dx, pos.y - 1, pos.z + dz) === "water");
+          if (nearWater && ((world.seed + pos.x * 13 + pos.z * 29) & 3) === 0) {
+            inventory.sugar_cane += 1;
+            status.textContent = "获得甘蔗";
+          }
+        }
+        const gained = miningXpFor(removed);
+        if (gained > 0) {
+          addExperience(enchantState.experience, gained);
+          renderXp();
         }
         addExhaustion(hunger, EXHAUSTION.mineBlock);
         renderHunger();
@@ -1685,7 +1763,8 @@ const updateMining = (delta: number): void => {
     miningKey = key;
     miningProgress = 0;
   }
-  miningProgress = Math.min(1, miningProgress + delta / breakDuration(block, stations.equippedTool));
+  const mineDuration = breakDuration(block, stations.equippedTool) / (isPickaxe(stations.equippedTool ?? undefined) ? efficiencyMultiplier(equippedEnchantments()) : 1);
+  miningProgress = Math.min(1, miningProgress + delta / mineDuration);
   status.textContent = `挖掘 ${labels[block]} · ${Math.round(miningProgress * 100)}%`;
   if (miningProgress >= 1) {
     edit(false);
@@ -1746,6 +1825,11 @@ const applyWorldSlot = (slot: WorldSlot): void => {
   playerHealth = maxPlayerHealth;
   hunger = createHungerState(slot.save.player.hunger);
   armor = createArmorState(slot.save.player.armor);
+  enchantState = createEnchantSaveState(slot.save.player.enchanting);
+  const restoredTool = findGear(enchantState.gear, enchantState.equippedToolUid);
+  if (restoredTool) stations.equippedTool = restoredTool.item as ExtraItem;
+  renderXp();
+  renderArmor();
   renderHunger();
   renderArmor();
   syncRenderedChunks(true);
@@ -1892,6 +1976,18 @@ renderer.domElement.addEventListener("mousedown", (event) => {
         status.textContent = "熔炉已打开";
         return;
       }
+      if (aimed === "enchanting_table") {
+        const key = `${target.position.x},${target.position.y},${target.position.z}`;
+        const power = countBookshelfPower(
+          (x, y, z) => world.get(x, y, z),
+          target.position,
+        );
+        openEnchantAt(stations, inventory, key, world.seed ^ (target.position.x * 31 + target.position.z), power);
+        releasePointerForUi();
+        refreshStationsUi();
+        status.textContent = `附魔台已打开 · 书架能量 ${power}/15`;
+        return;
+      }
       if (aimed === "bed") {
         const result = trySleepInBed({
           worldTimeMs: dayClock.now(),
@@ -1989,6 +2085,8 @@ document.addEventListener("keydown", (event) => {
     } else {
       const index = stations.equippedTool ? tools.indexOf(stations.equippedTool) : -1;
       stations.equippedTool = tools[(index + 1) % tools.length];
+      const match = enchantState.gear.find((g) => g.item === stations.equippedTool);
+      enchantState.equippedToolUid = match?.uid ?? null;
       renderHotbar();
       status.textContent = `手持 ${ITEM_LABELS[stations.equippedTool]}`;
     }
@@ -2000,6 +2098,7 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "Escape" && !event.repeat && anyStationOpen()) {
     closeCraft(stations, inventory);
     closeFurnace(stations);
+    closeEnchant(stations, inventory);
     refreshStationsUi();
     renderHotbar();
     return;
@@ -2593,7 +2692,20 @@ requestAnimationFrame(frame);
 
 craftPanel.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
+  const beforeArmor = { ...armor };
   if (!handleCraftClick(stations, inventory, target, armor)) return;
+  for (const slot of ["helmet", "chestplate", "leggings", "boots"] as const) {
+    if (beforeArmor[slot] && !armor[slot]) enchantState.armorEnchants[slot] = [];
+    if (armor[slot] && armor[slot] !== beforeArmor[slot]) {
+      // Equipped a plain piece from the bag — clear prior enchant on that slot.
+      if (!enchantState.gear.some((g) => g.item === armor[slot])) enchantState.armorEnchants[slot] = [];
+    }
+  }
+  if (target.closest("[data-equip-tool]")) {
+    const match = enchantState.gear.find((g) => g.item === stations.equippedTool);
+    enchantState.equippedToolUid = match?.uid ?? null;
+    renderXp();
+  }
   soundscape.play("craft");
   refreshStationsUi();
   renderHotbar();
@@ -2608,6 +2720,44 @@ furnacePanel.addEventListener("click", (event) => {
   soundscape.play("craft");
   refreshStationsUi();
   renderHotbar();
+  dirty = true;
+  persist();
+});
+
+enchantPanel.addEventListener("click", (event) => {
+  const target = event.target as HTMLElement;
+  if (!handleEnchantClick(stations, inventory, target, {
+    experience: enchantState.experience,
+    gear: enchantState.gear,
+    onEnchanted: (item) => {
+      if (isSword(item.item) || isPickaxe(item.item)) {
+        stations.equippedTool = item.item as ExtraItem;
+        enchantState.equippedToolUid = item.uid;
+      }
+      status.textContent = `附魔成功 · ${ITEM_LABELS[item.item]} · ${formatEnchantments(item.enchantments)}`;
+      renderXp();
+    },
+    applyArmorEnchants: (item, enchantments) => {
+      if (!isArmorPiece(item)) return;
+      const slot = armorSlotOf(item);
+      const previous = armor[slot];
+      if (previous) {
+        inventory[previous] = (inventory[previous] ?? 0) + 1;
+        enchantState.armorEnchants[slot] = [];
+      }
+      // Prefer the just-enchanted gear entry (last matching item).
+      const worn = [...enchantState.gear].reverse().find((entry) => entry.item === item);
+      if (worn) removeGear(enchantState.gear, worn.uid);
+      armor[slot] = item;
+      enchantState.armorEnchants[slot] = enchantments.map((entry) => ({ ...entry }));
+      renderArmor();
+    },
+  })) return;
+  soundscape.play("craft");
+  refreshStationsUi();
+  renderHotbar();
+  renderArmor();
+  renderXp();
   dirty = true;
   persist();
 });

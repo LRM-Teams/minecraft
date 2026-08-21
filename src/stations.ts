@@ -28,6 +28,24 @@ import {
   type ArmorPiece,
   type ArmorState,
 } from "./armor";
+import {
+  ENCHANT_LABELS,
+  canTakeOffer,
+  createEnchantTable,
+  depositEnchantInput,
+  depositLapis,
+  formatEnchantments,
+  isEnchantable,
+  refreshOffers,
+  takeOffer,
+  withdrawEnchantInput,
+  withdrawLapis,
+  type EnchantOffer,
+  type EnchantTableState,
+  type EnchantedItem,
+  type Enchantment,
+  type ExperienceState,
+} from "./enchanting";
 
 export type CraftMode = "inventory" | "table";
 
@@ -39,6 +57,10 @@ export type StationController = {
   furnaceKey: string | null;
   furnaces: Map<string, FurnaceState>;
   equippedTool: ExtraItem | null;
+  enchantOpen: boolean;
+  enchantKey: string | null;
+  enchantTable: EnchantTableState;
+  bookshelfPower: number;
 };
 
 export const createStations = (): StationController => ({
@@ -49,6 +71,10 @@ export const createStations = (): StationController => ({
   furnaceKey: null,
   furnaces: new Map(),
   equippedTool: null,
+  enchantOpen: false,
+  enchantKey: null,
+  enchantTable: createEnchantTable(1),
+  bookshelfPower: 0,
 });
 
 export const openInventoryCraft = (stations: StationController, inventory: Inventory): void => {
@@ -57,6 +83,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
     return;
   }
   closeFurnace(stations);
+  closeEnchant(stations, inventory);
   stations.craftMode = "inventory";
   stations.craftGrid = emptyGrid(2);
   stations.craftOpen = true;
@@ -64,6 +91,7 @@ export const openInventoryCraft = (stations: StationController, inventory: Inven
 
 export const openTableCraft = (stations: StationController, inventory: Inventory): void => {
   closeFurnace(stations);
+  closeEnchant(stations, inventory);
   if (stations.craftOpen) refundGrid(inventory, stations.craftGrid);
   stations.craftMode = "table";
   stations.craftGrid = emptyGrid(3);
@@ -78,6 +106,7 @@ export const closeCraft = (stations: StationController, inventory: Inventory): v
 
 export const openFurnaceAt = (stations: StationController, inventory: Inventory, key: string): void => {
   closeCraft(stations, inventory);
+  closeEnchant(stations, inventory);
   if (!stations.furnaces.has(key)) stations.furnaces.set(key, createFurnaceState());
   stations.furnaceKey = key;
   stations.furnaceOpen = true;
@@ -86,6 +115,36 @@ export const openFurnaceAt = (stations: StationController, inventory: Inventory,
 export const closeFurnace = (stations: StationController): void => {
   stations.furnaceOpen = false;
   stations.furnaceKey = null;
+};
+
+export const openEnchantAt = (
+  stations: StationController,
+  inventory: Inventory,
+  key: string,
+  seed: number,
+  bookshelfPower: number,
+): void => {
+  closeCraft(stations, inventory);
+  closeFurnace(stations);
+  if (stations.enchantOpen && stations.enchantKey !== key) {
+    closeEnchant(stations, inventory);
+  }
+  stations.enchantKey = key;
+  stations.enchantTable.seed = seed;
+  stations.bookshelfPower = bookshelfPower;
+  stations.enchantOpen = true;
+};
+
+export const closeEnchant = (stations: StationController, inventory: Inventory): void => {
+  if (!stations.enchantOpen) return;
+  withdrawEnchantInput(stations.enchantTable, inventory);
+  if (stations.enchantTable.lapis > 0) {
+    inventory.lapis_lazuli = (inventory.lapis_lazuli ?? 0) + stations.enchantTable.lapis;
+    stations.enchantTable.lapis = 0;
+  }
+  stations.enchantTable.offers = [];
+  stations.enchantOpen = false;
+  stations.enchantKey = null;
 };
 
 export const activeFurnace = (stations: StationController): FurnaceState | undefined =>
@@ -184,6 +243,46 @@ export const renderFurnacePanelHtml = (state: FurnaceState, inventory: Inventory
   `;
 };
 
+export const renderEnchantPanelHtml = (
+  stations: StationController,
+  inventory: Inventory,
+  experience: ExperienceState,
+  gear: EnchantedItem[],
+): string => {
+  const table = stations.enchantTable;
+  refreshOffers(table, experience, stations.bookshelfPower);
+  const inputLabel = table.input ? ITEM_LABELS[table.input] : "放入可附魔物品";
+  const offers = table.offers.map((offer) => {
+    const affordable = canTakeOffer(table, experience, offer);
+    const label = `${ENCHANT_LABELS[offer.enchantment.id]} ${offer.enchantment.level} · ${offer.levelCost}级 · 青金石×${offer.lapisCost}`;
+    return `<button type="button" class="station-bag enchant-offer ${affordable ? "" : "locked"}" data-enchant-offer="${offer.slot}" ${affordable ? "" : "disabled"}>${label}</button>`;
+  }).join("") || "<p class='station-empty'>放入剑/镐/护甲后刷新选项</p>";
+  const bagItems = ownedItems(inventory)
+    .filter(isEnchantable)
+    .map((item) => `<button type="button" class="station-bag" data-enchant-item="${item}">${ITEM_LABELS[item]} <small>${inventory[item]}</small></button>`)
+    .join("") || "<p class='station-empty'>无可附魔物品</p>";
+  const lapisBtn = (inventory.lapis_lazuli ?? 0) > 0
+    ? `<button type="button" class="station-bag" data-enchant-lapis>放入青金石 <small>${inventory.lapis_lazuli}</small></button>`
+    : "<p class='station-empty'>无青金石</p>";
+  const gearList = gear.map((entry) =>
+    `<div class="recipe-line"><span>${ITEM_LABELS[entry.item]}</span><small>${formatEnchantments(entry.enchantments)}</small></div>`,
+  ).join("") || "<p class='station-empty'>尚无已附魔装备</p>";
+
+  return `
+    <div class="station-head"><strong>附魔台 · 书架 ${stations.bookshelfPower}/15 · 等级 ${experience.level}</strong><button type="button" data-enchant-close>关闭 Esc</button></div>
+    <div class="furnace-body enchant-body">
+      <div class="furnace-slots">
+        <button type="button" class="station-cell" data-enchant-slot="input">${inputLabel}</button>
+        <button type="button" class="station-cell" data-enchant-slot="lapis">青金石 ×${table.lapis}</button>
+        <div class="station-col"><h4>附魔选项</h4><div class="station-bag-list">${offers}</div></div>
+      </div>
+      <div class="station-col"><h4>可附魔</h4><div class="station-bag-list">${bagItems}</div></div>
+      <div class="station-col"><h4>青金石</h4><div class="station-bag-list">${lapisBtn}</div></div>
+      <div class="station-col recipe-book"><h4>已附魔存档</h4>${gearList}</div>
+    </div>
+  `;
+};
+
 export const handleCraftClick = (
   stations: StationController,
   inventory: Inventory,
@@ -263,6 +362,59 @@ export const handleFurnaceClick = (
   const slot = target.closest<HTMLElement>("[data-furnace-slot]");
   if (slot?.dataset.furnaceSlot === "output" || slot?.dataset.furnaceSlot === "input" || slot?.dataset.furnaceSlot === "fuel") {
     withdrawFurnace(state, inventory, slot.dataset.furnaceSlot);
+    return true;
+  }
+  return false;
+};
+
+export type EnchantClickContext = {
+  experience: ExperienceState;
+  gear: EnchantedItem[];
+  onEnchanted?: (item: EnchantedItem, offer: EnchantOffer) => void;
+  /** Apply armor enchantments when an enchanted armor piece is produced. */
+  applyArmorEnchants?: (item: ItemType, enchantments: Enchantment[]) => void;
+};
+
+export const handleEnchantClick = (
+  stations: StationController,
+  inventory: Inventory,
+  target: HTMLElement,
+  ctx: EnchantClickContext,
+): boolean => {
+  if (!stations.enchantOpen) return false;
+  if (target.closest("[data-enchant-close]")) {
+    closeEnchant(stations, inventory);
+    return true;
+  }
+  const itemBtn = target.closest<HTMLElement>("[data-enchant-item]");
+  if (itemBtn?.dataset.enchantItem) {
+    depositEnchantInput(stations.enchantTable, inventory, itemBtn.dataset.enchantItem as ItemType);
+    refreshOffers(stations.enchantTable, ctx.experience, stations.bookshelfPower);
+    return true;
+  }
+  if (target.closest("[data-enchant-lapis]")) {
+    depositLapis(stations.enchantTable, inventory, 1);
+    return true;
+  }
+  const slot = target.closest<HTMLElement>("[data-enchant-slot]");
+  if (slot?.dataset.enchantSlot === "input") {
+    withdrawEnchantInput(stations.enchantTable, inventory);
+    return true;
+  }
+  if (slot?.dataset.enchantSlot === "lapis") {
+    withdrawLapis(stations.enchantTable, inventory, 1);
+    return true;
+  }
+  const offerBtn = target.closest<HTMLElement>("[data-enchant-offer]");
+  if (offerBtn?.dataset.enchantOffer !== undefined) {
+    const slotIndex = Number(offerBtn.dataset.enchantOffer);
+    const offer = stations.enchantTable.offers.find((entry) => entry.slot === slotIndex);
+    if (!offer) return true;
+    const result = takeOffer(stations.enchantTable, ctx.experience, ctx.gear, offer);
+    if (result) {
+      ctx.onEnchanted?.(result, offer);
+      if (isArmor(result.item)) ctx.applyArmorEnchants?.(result.item, result.enchantments);
+    }
     return true;
   }
   return false;
