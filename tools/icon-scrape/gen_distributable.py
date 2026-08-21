@@ -60,6 +60,8 @@ COLORS: dict[str, int] = {
     "torch": 0xFFC15A,
     "wool": 0xF0EBE3,
     "bed": 0xC43C3C,
+    "oak_door": 0x8B5A2B,
+    "ladder": 0x9A6A3A,
     "redstone_dust": 0xC41E1E,
     "lever": 0x8A7A5A,
     "redstone_torch": 0xFF3030,
@@ -170,6 +172,19 @@ def render_block(item_id: str, base_hex: int) -> Image.Image:
         paint(img, rgb(base), 0, 0, 16, 9)
         for x in range(0, 16, 2):
             paint(img, mul_hex(base, 0.85), x, 2, 1, 5)
+    elif item_id == "oak_door":
+        paint(img, rgb(base), 0, 0, 16, 16)
+        paint(img, mul_hex(base, 0.7), 0, 0, 16, 1)
+        paint(img, mul_hex(base, 0.7), 0, 15, 16, 1)
+        paint(img, mul_hex(base, 0.7), 0, 0, 1, 16)
+        paint(img, mul_hex(base, 0.7), 15, 0, 1, 16)
+        paint(img, rgb(0x3A3020), 11, 7, 2, 2)
+    elif item_id == "ladder":
+        img = Image.new("RGBA", (CELL, CELL), (0, 0, 0, 0))
+        paint(img, rgb(base), 2, 0, 2, 16)
+        paint(img, rgb(base), 12, 0, 2, 16)
+        for y in range(2, 16, 4):
+            paint(img, mul_hex(base, 1.1), 2, y, 12, 2)
     elif item_id == "glass":
         img = Image.new("RGBA", (CELL, CELL), (*mul_hex(base, 0.55), 160))
         for y in range(16):
@@ -431,17 +446,25 @@ def update_mapping(rows: list[dict], core_ids: list[str], atlas_meta: dict) -> N
     mapping_path = OUT / "mapping.json"
     mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
     items = mapping.setdefault("items", {})
-    for row in rows:
-        item_id = row["item_id"]
+    by_id = {row["item_id"]: row for row in rows}
+    EXTRA_NAMES = {
+        "oak_door": ("木门", "Oak Door"),
+        "ladder": ("梯子", "Ladder"),
+    }
+    for item_id in sorted(set(by_id) | set(core_ids) | set(atlas_meta["frames"])):
+        if item_id not in atlas_meta["frames"]:
+            continue
+        row = by_id.get(item_id, {})
         prev = items.get(item_id, {})
+        zh_fallback, en_fallback = EXTRA_NAMES.get(item_id, (item_id, item_id))
         items[item_id] = {
             "texture": f"cache/distributable/{item_id}.png",
             "icon_url": None,
             "license": LICENSE_ID,
             "bucket": "distributable",
             "distributable": True,
-            "zh_name": prev.get("zh_name") or row.get("zh_name") or item_id,
-            "en_name": prev.get("en_name") or row.get("en_name") or item_id,
+            "zh_name": prev.get("zh_name") or row.get("zh_name") or zh_fallback,
+            "en_name": prev.get("en_name") or row.get("en_name") or en_fallback,
             "atlas": {
                 "texture": "atlas.png",
                 **atlas_meta["frames"][item_id],

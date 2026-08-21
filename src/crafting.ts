@@ -185,6 +185,28 @@ export const RECIPES: readonly Recipe[] = [
     ],
     result: { item: "bed", count: 1 },
   },
+  // Vanilla oak door: 6 planks in two columns → 3 doors.
+  {
+    id: "oak_door",
+    width: 2,
+    pattern: [
+      cell("planks"), cell("planks"),
+      cell("planks"), cell("planks"),
+      cell("planks"), cell("planks"),
+    ],
+    result: { item: "oak_door", count: 3 },
+  },
+  // Vanilla ladder: sticks in H shape → 3 ladders.
+  {
+    id: "ladder",
+    width: 3,
+    pattern: [
+      cell("stick"), cell(null), cell("stick"),
+      cell("stick"), cell("stick"), cell("stick"),
+      cell("stick"), cell(null), cell("stick"),
+    ],
+    result: { item: "ladder", count: 3 },
+  },
   // Vanilla paper: three sugar cane in a row.
   {
     id: "paper",

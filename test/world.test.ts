@@ -56,7 +56,8 @@ describe("VoxelWorld", () => {
     // The anchor is the walkable air cell immediately over the brick plaza.
     expect(one.get(village.plaza.x, village.plaza.y - 1, village.plaza.z)).toBe("bricks");
     village.homes.forEach((home) => {
-      expect(one.get(home.entrance.x, home.entrance.y, home.entrance.z)).toBeUndefined();
+      expect(one.get(home.entrance.x, home.entrance.y, home.entrance.z)).toBe("oak_door");
+      expect(one.get(home.entrance.x, home.entrance.y + 1, home.entrance.z)).toBe("oak_door");
       expect(one.get(home.interior.x, home.interior.y, home.interior.z)).toBeUndefined();
       expect(home.workstation.y).toBe(home.interior.y);
     });

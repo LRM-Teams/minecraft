@@ -1,4 +1,6 @@
 import { placeBedPair } from "./bed";
+import { placeDoorPair } from "./doors";
+import { canPlaceLadderAt } from "./ladder";
 import {
   canPlaceRedstoneDeviceAt,
   canPlaceRedstoneDustAt,
@@ -15,6 +17,7 @@ export const BLOCK_INTERACT_TYPES = [
   "brewing_stand",
   "bed",
   "lever",
+  "oak_door",
 ] as const;
 
 export type BlockInteractType = (typeof BLOCK_INTERACT_TYPES)[number];
@@ -99,6 +102,21 @@ export const tryPlaceBlock = (
     if (!placeBedPair(world, position, options.yaw)) {
       return { ok: false, message: "床需要两格空间且下方坚实" };
     }
+    return { ok: true, position, type };
+  }
+
+  if (type === "oak_door") {
+    if (!placeDoorPair(world, position)) {
+      return { ok: false, message: "木门需要上下两格空位且下方坚实" };
+    }
+    return { ok: true, position, type };
+  }
+
+  if (type === "ladder") {
+    if (!canPlaceLadderAt(world, position, hit.position)) {
+      return { ok: false, message: "梯子需要贴在坚实墙面上" };
+    }
+    world.set(position, "ladder");
     return { ok: true, position, type };
   }
 

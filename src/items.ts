@@ -159,6 +159,8 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   torch: "火把",
   wool: "羊毛",
   bed: "床",
+  oak_door: "木门",
+  ladder: "梯子",
   redstone_dust: "红石粉",
   lever: "拉杆",
   redstone_torch: "红石火把",
