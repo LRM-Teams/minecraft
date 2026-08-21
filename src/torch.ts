@@ -18,9 +18,13 @@ export const torchesNear = (
 ): BlockPosition[] => {
   const found: BlockPosition[] = [];
   const r2 = radius * radius;
-  world.blocks.forEach((type, key) => {
-    if (type !== "torch") return;
-    const [x, y, z] = key.split(",").map(Number);
+  // Indexed torch keys — never scan the full voxel map (LRM-1613 longtask).
+  world.torchKeySet().forEach((key) => {
+    const c1 = key.indexOf(",");
+    const c2 = key.indexOf(",", c1 + 1);
+    const x = Number(key.slice(0, c1));
+    const y = Number(key.slice(c1 + 1, c2));
+    const z = Number(key.slice(c2 + 1));
     const dx = x - center.x;
     const dz = z - center.z;
     if (dx * dx + dz * dz > r2) return;

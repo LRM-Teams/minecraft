@@ -1808,9 +1808,10 @@ const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
   const chunkX = Math.floor(camera.position.x / CHUNK_SIZE);
   const chunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
   const meshRadius = perf.meshChunkRadius;
+  let grewTerrain = false;
   if (dimension === "overworld") {
     // At most N new terrain chunks per frame — never gen a full ring in one longtask.
-    world.ensureAround(
+    grewTerrain = world.ensureAround(
       camera.position.x,
       camera.position.z,
       perf.streamChunkRadius,
@@ -1836,10 +1837,10 @@ const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
   }
   if (dirtyAt) blocks.invalidateAt(dirtyAt.x, dirtyAt.y, dirtyAt.z);
   if (force && dirtyAt) {
-    // Place/break: remesh only dirty neighbourhood this frame.
+    // Place/break: enqueue dirty neighbourhood; pump at most one mesh/frame (no flush).
     blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
-      flush: true,
       remeshAll: false,
+      maxBuilds: perf.maxChunkBuildsPerFrame,
     });
     overworldPortal.rebuild(portalEntriesNear());
     loadedChunkX = chunkX;
@@ -1857,8 +1858,9 @@ const syncRenderedChunks = (force = false, dirtyAt?: BlockPosition): void => {
     loadedChunkZ = chunkZ;
     return;
   }
+  // Walking: never stack terrain gen + InstancedMesh build in the same frame.
   blocks.sync(world, camera.position.x, camera.position.z, meshRadius, {
-    maxBuilds: perf.maxChunkBuildsPerFrame,
+    maxBuilds: grewTerrain ? 0 : perf.maxChunkBuildsPerFrame,
   });
   if (!sameChunk) {
     overworldPortal.rebuild(portalEntriesNear());
