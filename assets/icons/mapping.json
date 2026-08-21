@@ -1,868 +1,2190 @@
 {
-  "schema_version": 1,
-  "description": "itemId → texture mapping for HUD / hotbar / inventory.",
+  "schema_version": 2,
+  "description": "itemId → distributable texture + atlas UV. Pages/ship builds use bucket=distributable only (cc0-original-procedural).",
   "default_extension": ".png",
   "cache_layout": {
-    "distributable": "assets/icons/cache/distributable/<item_id>.<ext>",
-    "restricted": "assets/icons/cache/restricted/<item_id>.<ext>",
-    "unknown": "assets/icons/cache/unknown/<item_id>.json (stub only)"
+    "distributable": "assets/icons/cache/distributable/<item_id>.png",
+    "restricted": "assets/icons/cache/restricted/<item_id>.<ext> (reference only; not shipped)",
+    "unknown": "assets/icons/cache/unknown/<item_id>.json"
   },
   "items": {
     "grass": {
-      "texture": "cache/restricted/grass.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Grass_Block_JE7_BE6.png?d27c1",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/grass.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "草方块",
-      "en_name": "Grass Block"
+      "en_name": "Grass Block",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.4,
+        "u2": 0.2727272727272727,
+        "v2": 0.5
+      }
     },
     "dirt": {
-      "texture": "cache/restricted/dirt.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Dirt_JE2_BE2.png?a4b3d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/dirt.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "泥土",
-      "en_name": "Dirt"
+      "en_name": "Dirt",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.2,
+        "u2": 0.8181818181818182,
+        "v2": 0.3
+      }
     },
     "stone": {
-      "texture": "cache/restricted/stone.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_JE5_BE3.png?33434",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石头",
-      "en_name": "Stone"
+      "en_name": "Stone",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.8,
+        "u2": 0.09090909090909091,
+        "v2": 0.9
+      }
     },
     "wood": {
-      "texture": "cache/restricted/wood.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Oak_Log_Axis_Y_JE5_BE3.png?da15a",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wood.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "原木",
-      "en_name": "Oak Log"
+      "en_name": "Oak Log",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.9,
+        "u2": 0.18181818181818182,
+        "v2": 1.0
+      }
     },
     "planks": {
-      "texture": "cache/restricted/planks.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Oak_Planks_JE9_BE3.png?2a459",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/planks.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木板",
-      "en_name": "Oak Planks"
+      "en_name": "Oak Planks",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.6,
+        "u2": 0.9090909090909091,
+        "v2": 0.7
+      }
     },
     "leaves": {
-      "texture": "cache/restricted/leaves.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Oak_Leaves_JE4.png?77e67",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leaves.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "树叶",
-      "en_name": "Oak Leaves"
+      "en_name": "Oak Leaves",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.6,
+        "u2": 0.2727272727272727,
+        "v2": 0.7
+      }
     },
     "sand": {
-      "texture": "cache/restricted/sand.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Sand_JE5_BE3.png?97c2c",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/sand.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "沙子",
-      "en_name": "Sand"
+      "en_name": "Sand",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.7,
+        "u2": 0.7272727272727273,
+        "v2": 0.8
+      }
     },
     "water": {
-      "texture": "cache/restricted/water.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Water_JE16.png?6cccc",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/water.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "水",
-      "en_name": "Water"
+      "en_name": "Water",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.8,
+        "u2": 0.9090909090909091,
+        "v2": 0.9
+      }
     },
     "bricks": {
-      "texture": "cache/restricted/bricks.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Bricks_JE3_BE2.png?e3b13",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bricks.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石砖",
-      "en_name": "Stone Bricks"
+      "en_name": "Stone Bricks",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.0,
+        "u2": 1.0,
+        "v2": 0.1
+      }
     },
     "glass": {
-      "texture": "cache/restricted/glass.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Glass_JE4_BE4.png?ead50",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/glass.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "玻璃",
-      "en_name": "Glass"
+      "en_name": "Glass",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.3,
+        "u2": 0.2727272727272727,
+        "v2": 0.4
+      }
     },
     "coal_ore": {
-      "texture": "cache/restricted/coal_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Coal_Ore_JE5_BE4.png?a343c",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/coal_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "煤矿石",
-      "en_name": "Coal Ore"
+      "en_name": "Coal Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.1,
+        "u2": 0.6363636363636364,
+        "v2": 0.2
+      }
     },
     "copper_ore": {
-      "texture": "cache/restricted/copper_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Copper_Ore_JE2_BE2.png?b6ae0",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/copper_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铜矿石",
-      "en_name": "Copper Ore"
+      "en_name": "Copper Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.1,
+        "u2": 1.0,
+        "v2": 0.2
+      }
     },
     "iron_ore": {
-      "texture": "cache/restricted/iron_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Ore_JE6_BE4.png?92763",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁矿石",
-      "en_name": "Iron Ore"
+      "en_name": "Iron Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.5,
+        "u2": 0.18181818181818182,
+        "v2": 0.6
+      }
     },
     "gold_ore": {
-      "texture": "cache/restricted/gold_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Gold_Ore_JE7_BE4.png?dd555",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金矿石",
-      "en_name": "Gold Ore"
+      "en_name": "Gold Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.3,
+        "u2": 0.9090909090909091,
+        "v2": 0.4
+      }
     },
     "diamond_ore": {
-      "texture": "cache/restricted/diamond_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Ore_JE5_BE5.png?73a76",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石矿石",
-      "en_name": "Diamond Ore"
+      "en_name": "Diamond Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.2,
+        "u2": 0.45454545454545453,
+        "v2": 0.3
+      }
     },
     "lapis_ore": {
-      "texture": "cache/restricted/lapis_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Lapis_Lazuli_Ore_JE4_BE4.png?d85b6",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/lapis_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "青金石矿",
-      "en_name": "Lapis Lazuli Ore"
+      "en_name": "Lapis Lazuli Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.5,
+        "u2": 0.6363636363636364,
+        "v2": 0.6
+      }
     },
     "redstone_ore": {
-      "texture": "cache/restricted/redstone_ore.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Ore_JE4_BE3.png?d2049",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/redstone_ore.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "红石矿",
-      "en_name": "Redstone Ore"
+      "en_name": "Redstone Ore",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.7,
+        "u2": 0.5454545454545454,
+        "v2": 0.8
+      }
     },
     "obsidian": {
-      "texture": "cache/restricted/obsidian.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Obsidian_JE3_BE2.png?31e17",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/obsidian.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "黑曜石",
-      "en_name": "Obsidian"
+      "en_name": "Obsidian",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.6,
+        "u2": 0.7272727272727273,
+        "v2": 0.7
+      }
     },
     "crafting_table": {
-      "texture": "cache/restricted/crafting_table.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Crafting_Table_JE4_BE3.png?738c8",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/crafting_table.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "工作台",
-      "en_name": "Crafting Table"
+      "en_name": "Crafting Table",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.2,
+        "u2": 0.09090909090909091,
+        "v2": 0.3
+      }
     },
     "furnace": {
-      "texture": "cache/restricted/furnace.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Furnace_%28S%29_JE8.png?fa497",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/furnace.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "熔炉",
-      "en_name": "Furnace"
+      "en_name": "Furnace",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.3,
+        "u2": 0.18181818181818182,
+        "v2": 0.4
+      }
     },
     "enchanting_table": {
-      "texture": "cache/restricted/enchanting_table.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Enchanting_Table_JE4_BE2.png?32e81",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/enchanting_table.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "附魔台",
-      "en_name": "Enchanting Table"
+      "en_name": "Enchanting Table",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.2,
+        "u2": 0.9090909090909091,
+        "v2": 0.3
+      }
     },
     "bookshelf": {
-      "texture": "cache/restricted/bookshelf.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Bookshelf_JE4_BE2.png?21f85",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bookshelf.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "书架",
-      "en_name": "Bookshelf"
+      "en_name": "Bookshelf",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.0,
+        "u2": 0.7272727272727273,
+        "v2": 0.1
+      }
     },
     "brewing_stand": {
-      "texture": "cache/restricted/brewing_stand.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Brewing_Stand_JE4_BE3.png?2a6e0",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/brewing_stand.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "酿造台",
-      "en_name": "Brewing Stand"
+      "en_name": "Brewing Stand",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.0,
+        "u2": 0.9090909090909091,
+        "v2": 0.1
+      }
     },
     "torch": {
-      "texture": "cache/restricted/torch.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Torch_JE4_BE2.png?b6520",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/torch.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "火把",
-      "en_name": "Torch"
+      "en_name": "Torch",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.8,
+        "u2": 0.8181818181818182,
+        "v2": 0.9
+      }
     },
     "wool": {
-      "texture": "cache/restricted/wool.png",
-      "icon_url": "https://zh.minecraft.wiki/images/White_Wool_JE2_BE2.png?281c1",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wool.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "羊毛",
-      "en_name": "White Wool"
+      "en_name": "White Wool",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.9,
+        "u2": 0.7272727272727273,
+        "v2": 1.0
+      }
     },
     "bed": {
-      "texture": "cache/restricted/bed.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Red_Bed_%28N%29_JE4.png?553e8",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bed.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "床",
-      "en_name": "Red Bed"
+      "en_name": "Red Bed",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.0,
+        "u2": 0.2727272727272727,
+        "v2": 0.1
+      }
     },
     "redstone_dust": {
-      "texture": "cache/restricted/redstone_dust.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Dust_JE2_BE2.png?030c0",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/redstone_dust.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "红石粉",
-      "en_name": "Redstone Dust"
+      "en_name": "Redstone Dust",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.7,
+        "u2": 0.36363636363636365,
+        "v2": 0.8
+      }
     },
     "lever": {
-      "texture": "cache/restricted/lever.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Lever_JE3_BE2.png?5d96e",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/lever.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "拉杆",
-      "en_name": "Lever"
+      "en_name": "Lever",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.6,
+        "u2": 0.36363636363636365,
+        "v2": 0.7
+      }
     },
     "redstone_torch": {
-      "texture": "cache/restricted/redstone_torch.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Torch_JE5.png?86adf",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/redstone_torch.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "红石火把",
-      "en_name": "Redstone Torch"
+      "en_name": "Redstone Torch",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.7,
+        "u2": 0.6363636363636364,
+        "v2": 0.8
+      }
     },
     "redstone_lamp": {
-      "texture": "cache/restricted/redstone_lamp.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Redstone_Lamp_JE3_BE2.png?41a41",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/redstone_lamp.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "红石灯",
-      "en_name": "Redstone Lamp"
+      "en_name": "Redstone Lamp",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.7,
+        "u2": 0.45454545454545453,
+        "v2": 0.8
+      }
     },
     "stick": {
-      "texture": "cache/restricted/stick.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stick_JE1_BE1.png?2ab19",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stick.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木棍",
-      "en_name": "Stick"
+      "en_name": "Stick",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.7,
+        "u2": 1.0,
+        "v2": 0.8
+      }
     },
     "coal": {
-      "texture": "cache/restricted/coal.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Coal_JE3_BE2.png?b473d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/coal.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "煤炭",
-      "en_name": "Coal"
+      "en_name": "Coal",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.1,
+        "u2": 0.5454545454545454,
+        "v2": 0.2
+      }
     },
     "charcoal": {
-      "texture": "cache/restricted/charcoal.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Charcoal_JE3_BE3.png?a0b32",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/charcoal.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木炭",
-      "en_name": "Charcoal"
+      "en_name": "Charcoal",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.1,
+        "u2": 0.18181818181818182,
+        "v2": 0.2
+      }
     },
     "iron_ingot": {
-      "texture": "cache/restricted/iron_ingot.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Ingot_JE3_BE2.png?a0c64",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_ingot.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁锭",
-      "en_name": "Iron Ingot"
+      "en_name": "Iron Ingot",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.4,
+        "u2": 1.0,
+        "v2": 0.5
+      }
     },
     "gold_ingot": {
-      "texture": "cache/restricted/gold_ingot.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Gold_Ingot_JE4_BE2.png?bd10b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_ingot.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金锭",
-      "en_name": "Gold Ingot"
+      "en_name": "Gold Ingot",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.3,
+        "u2": 0.8181818181818182,
+        "v2": 0.4
+      }
     },
     "copper_ingot": {
-      "texture": "cache/restricted/copper_ingot.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Copper_Ingot_JE2_BE1.png?1772e",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/copper_ingot.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铜锭",
-      "en_name": "Copper Ingot"
+      "en_name": "Copper Ingot",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.1,
+        "u2": 0.9090909090909091,
+        "v2": 0.2
+      }
     },
     "diamond": {
-      "texture": "cache/restricted/diamond.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_JE2_BE2.png?36a4d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石",
-      "en_name": "Diamond"
+      "en_name": "Diamond",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.2,
+        "u2": 0.18181818181818182,
+        "v2": 0.3
+      }
     },
     "wooden_pickaxe": {
-      "texture": "cache/restricted/wooden_pickaxe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Pickaxe_JE3_BE3.png?82b30",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wooden_pickaxe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木镐",
-      "en_name": "Wooden Pickaxe"
+      "en_name": "Wooden Pickaxe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.9,
+        "u2": 0.45454545454545453,
+        "v2": 1.0
+      }
     },
     "stone_pickaxe": {
-      "texture": "cache/restricted/stone_pickaxe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Pickaxe_JE2_BE2.png?47567",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone_pickaxe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石镐",
-      "en_name": "Stone Pickaxe"
+      "en_name": "Stone Pickaxe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.8,
+        "u2": 0.36363636363636365,
+        "v2": 0.9
+      }
     },
     "iron_pickaxe": {
-      "texture": "cache/restricted/iron_pickaxe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Pickaxe_JE3_BE2.png?49cf2",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_pickaxe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁镐",
-      "en_name": "Iron Pickaxe"
+      "en_name": "Iron Pickaxe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.5,
+        "u2": 0.2727272727272727,
+        "v2": 0.6
+      }
     },
     "gold_pickaxe": {
-      "texture": "cache/restricted/gold_pickaxe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Golden_Pickaxe_JE4_BE3.png?79864",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_pickaxe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金镐",
-      "en_name": "Golden Pickaxe"
+      "en_name": "Golden Pickaxe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.3,
+        "u2": 1.0,
+        "v2": 0.4
+      }
     },
     "diamond_pickaxe": {
-      "texture": "cache/restricted/diamond_pickaxe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Pickaxe_JE3_BE3.png?40f8b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_pickaxe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石镐",
-      "en_name": "Diamond Pickaxe"
+      "en_name": "Diamond Pickaxe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.2,
+        "u2": 0.5454545454545454,
+        "v2": 0.3
+      }
     },
     "wooden_axe": {
-      "texture": "cache/restricted/wooden_axe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Axe_JE2_BE2.png?5e2c6",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wooden_axe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木斧",
-      "en_name": "Wooden Axe"
+      "en_name": "Wooden Axe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.9,
+        "u2": 0.2727272727272727,
+        "v2": 1.0
+      }
     },
     "stone_axe": {
-      "texture": "cache/restricted/stone_axe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Axe_JE2_BE2.png?9c7ef",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone_axe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石斧",
-      "en_name": "Stone Axe"
+      "en_name": "Stone Axe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.8,
+        "u2": 0.18181818181818182,
+        "v2": 0.9
+      }
     },
     "iron_axe": {
-      "texture": "cache/restricted/iron_axe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Axe_JE5_BE2.png?8eaa4",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_axe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁斧",
-      "en_name": "Iron Axe"
+      "en_name": "Iron Axe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.4,
+        "u2": 0.5454545454545454,
+        "v2": 0.5
+      }
     },
     "gold_axe": {
-      "texture": "cache/restricted/gold_axe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Golden_Axe_JE3_BE2.png?ed1c7",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_axe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金斧",
-      "en_name": "Golden Axe"
+      "en_name": "Golden Axe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.3,
+        "u2": 0.6363636363636364,
+        "v2": 0.4
+      }
     },
     "diamond_axe": {
-      "texture": "cache/restricted/diamond_axe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Axe_JE3_BE3.png?a746d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_axe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石斧",
-      "en_name": "Diamond Axe"
+      "en_name": "Diamond Axe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.2,
+        "u2": 0.2727272727272727,
+        "v2": 0.3
+      }
     },
     "wooden_shovel": {
-      "texture": "cache/restricted/wooden_shovel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Shovel_JE2_BE2.png?a78a2",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wooden_shovel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木铲",
-      "en_name": "Wooden Shovel"
+      "en_name": "Wooden Shovel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.9,
+        "u2": 0.5454545454545454,
+        "v2": 1.0
+      }
     },
     "stone_shovel": {
-      "texture": "cache/restricted/stone_shovel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Shovel_JE2_BE2.png?716b9",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone_shovel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石铲",
-      "en_name": "Stone Shovel"
+      "en_name": "Stone Shovel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.8,
+        "u2": 0.45454545454545453,
+        "v2": 0.9
+      }
     },
     "iron_shovel": {
-      "texture": "cache/restricted/iron_shovel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Shovel_JE3_BE2.png?fadf7",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_shovel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁铲",
-      "en_name": "Iron Shovel"
+      "en_name": "Iron Shovel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.5,
+        "u2": 0.36363636363636365,
+        "v2": 0.6
+      }
     },
     "gold_shovel": {
-      "texture": "cache/restricted/gold_shovel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Golden_Shovel_JE3_BE2.png?e3b17",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_shovel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金铲",
-      "en_name": "Golden Shovel"
+      "en_name": "Golden Shovel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.4,
+        "u2": 0.09090909090909091,
+        "v2": 0.5
+      }
     },
     "diamond_shovel": {
-      "texture": "cache/restricted/diamond_shovel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Shovel_JE3_BE3.png?18d39",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_shovel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石铲",
-      "en_name": "Diamond Shovel"
+      "en_name": "Diamond Shovel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.2,
+        "u2": 0.6363636363636364,
+        "v2": 0.3
+      }
     },
     "wooden_sword": {
-      "texture": "cache/restricted/wooden_sword.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Sword_JE2_BE2.png?b526d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wooden_sword.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木剑",
-      "en_name": "Wooden Sword"
+      "en_name": "Wooden Sword",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.9,
+        "u2": 0.6363636363636364,
+        "v2": 1.0
+      }
     },
     "stone_sword": {
-      "texture": "cache/restricted/stone_sword.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Sword_JE2_BE2.png?0287a",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone_sword.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石剑",
-      "en_name": "Stone Sword"
+      "en_name": "Stone Sword",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.8,
+        "u2": 0.5454545454545454,
+        "v2": 0.9
+      }
     },
     "iron_sword": {
-      "texture": "cache/restricted/iron_sword.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Sword_JE2_BE2.png?6a66b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_sword.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁剑",
-      "en_name": "Iron Sword"
+      "en_name": "Iron Sword",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.5,
+        "u2": 0.45454545454545453,
+        "v2": 0.6
+      }
     },
     "gold_sword": {
-      "texture": "cache/restricted/gold_sword.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Golden_Sword_JE3_BE2.png?0fcc4",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_sword.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金剑",
-      "en_name": "Golden Sword"
+      "en_name": "Golden Sword",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.4,
+        "u2": 0.18181818181818182,
+        "v2": 0.5
+      }
     },
     "diamond_sword": {
-      "texture": "cache/restricted/diamond_sword.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Sword_JE3_BE3.png?7b46e",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_sword.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石剑",
-      "en_name": "Diamond Sword"
+      "en_name": "Diamond Sword",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.2,
+        "u2": 0.7272727272727273,
+        "v2": 0.3
+      }
     },
     "wooden_hoe": {
-      "texture": "cache/restricted/wooden_hoe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wooden_Hoe_JE3_BE3.png?fce53",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wooden_hoe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "木锄",
-      "en_name": "Wooden Hoe"
+      "en_name": "Wooden Hoe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.9,
+        "u2": 0.36363636363636365,
+        "v2": 1.0
+      }
     },
     "stone_hoe": {
-      "texture": "cache/restricted/stone_hoe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Stone_Hoe_JE3_BE2.png?964d1",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/stone_hoe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "石锄",
-      "en_name": "Stone Hoe"
+      "en_name": "Stone Hoe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.8,
+        "u2": 0.2727272727272727,
+        "v2": 0.9
+      }
     },
     "iron_hoe": {
-      "texture": "cache/restricted/iron_hoe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Hoe_JE2_BE2.png?20976",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_hoe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁锄",
-      "en_name": "Iron Hoe"
+      "en_name": "Iron Hoe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.4,
+        "u2": 0.9090909090909091,
+        "v2": 0.5
+      }
     },
     "gold_hoe": {
-      "texture": "cache/restricted/gold_hoe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Golden_Hoe_JE3_BE3.png?73fb2",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gold_hoe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "金锄",
-      "en_name": "Golden Hoe"
+      "en_name": "Golden Hoe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.3,
+        "u2": 0.7272727272727273,
+        "v2": 0.4
+      }
     },
     "diamond_hoe": {
-      "texture": "cache/restricted/diamond_hoe.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Diamond_Hoe_JE3_BE3.png?ed241",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/diamond_hoe.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "钻石锄",
-      "en_name": "Diamond Hoe"
+      "en_name": "Diamond Hoe",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.2,
+        "u2": 0.36363636363636365,
+        "v2": 0.3
+      }
     },
     "wheat": {
-      "texture": "cache/restricted/wheat.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Wheat_JE2_BE2.png?0eb25",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/wheat.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "小麦",
-      "en_name": "Wheat"
+      "en_name": "Wheat",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 144,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.9,
+        "u2": 0.09090909090909091,
+        "v2": 1.0
+      }
     },
     "apple": {
-      "texture": "cache/restricted/apple.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Apple_JE3_BE3.png?cc008",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/apple.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "苹果",
-      "en_name": "Apple"
+      "en_name": "Apple",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.0,
+        "u2": 0.09090909090909091,
+        "v2": 0.1
+      }
     },
     "bread": {
-      "texture": "cache/restricted/bread.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Bread_JE3_BE3.png?f220b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bread.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "面包",
-      "en_name": "Bread"
+      "en_name": "Bread",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.0,
+        "u2": 0.8181818181818182,
+        "v2": 0.1
+      }
     },
     "raw_beef": {
-      "texture": "cache/restricted/raw_beef.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Raw_Beef_JE3_BE3.png?55e2e",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/raw_beef.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "生牛肉",
-      "en_name": "Raw Beef"
+      "en_name": "Raw Beef",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.7,
+        "u2": 0.2727272727272727,
+        "v2": 0.8
+      }
     },
     "cooked_beef": {
-      "texture": "cache/restricted/cooked_beef.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Steak_JE3_BE3.png?0d524",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/cooked_beef.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "熟牛排",
-      "en_name": "Steak"
+      "en_name": "Steak",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.1,
+        "u2": 0.8181818181818182,
+        "v2": 0.2
+      }
     },
     "leather": {
-      "texture": "cache/restricted/leather.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Leather_JE2_BE2.png?f5373",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leather.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "皮革",
-      "en_name": "Leather"
+      "en_name": "Leather",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.5,
+        "u2": 0.8181818181818182,
+        "v2": 0.6
+      }
     },
     "leather_helmet": {
-      "texture": "cache/restricted/leather_helmet.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Leather_Cap_JE4_BE2.png?478b4",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leather_helmet.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "皮革头盔",
-      "en_name": "Leather Cap"
+      "en_name": "Leather Cap",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.6,
+        "u2": 0.09090909090909091,
+        "v2": 0.7
+      }
     },
     "leather_chestplate": {
-      "texture": "cache/restricted/leather_chestplate.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Leather_Tunic_JE4_BE2.png?e16aa",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leather_chestplate.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "皮革胸甲",
-      "en_name": "Leather Tunic"
+      "en_name": "Leather Tunic",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.5,
+        "u2": 1.0,
+        "v2": 0.6
+      }
     },
     "leather_leggings": {
-      "texture": "cache/restricted/leather_leggings.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Leather_Pants_JE4_BE2.png?bd496",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leather_leggings.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "皮革护腿",
-      "en_name": "Leather Pants"
+      "en_name": "Leather Pants",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.6,
+        "u2": 0.18181818181818182,
+        "v2": 0.7
+      }
     },
     "leather_boots": {
-      "texture": "cache/restricted/leather_boots.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Leather_Boots_JE3_BE2.png?be9db",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/leather_boots.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "皮革靴子",
-      "en_name": "Leather Boots"
+      "en_name": "Leather Boots",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.5,
+        "u2": 0.9090909090909091,
+        "v2": 0.6
+      }
     },
     "iron_helmet": {
-      "texture": "cache/restricted/iron_helmet.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Helmet_JE2_BE2.png?bfba3",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_helmet.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁头盔",
-      "en_name": "Iron Helmet"
+      "en_name": "Iron Helmet",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.4,
+        "u2": 0.8181818181818182,
+        "v2": 0.5
+      }
     },
     "iron_chestplate": {
-      "texture": "cache/restricted/iron_chestplate.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Chestplate_JE2_BE2.png?61f89",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_chestplate.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁胸甲",
-      "en_name": "Iron Chestplate"
+      "en_name": "Iron Chestplate",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.4,
+        "u2": 0.7272727272727273,
+        "v2": 0.5
+      }
     },
     "iron_leggings": {
-      "texture": "cache/restricted/iron_leggings.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Leggings_JE2_BE2.png?7dffe",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_leggings.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁护腿",
-      "en_name": "Iron Leggings"
+      "en_name": "Iron Leggings",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.5,
+        "u2": 0.09090909090909091,
+        "v2": 0.6
+      }
     },
     "iron_boots": {
-      "texture": "cache/restricted/iron_boots.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Iron_Boots_JE2_BE2.png?01f59",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/iron_boots.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "铁靴子",
-      "en_name": "Iron Boots"
+      "en_name": "Iron Boots",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.4,
+        "u2": 0.6363636363636364,
+        "v2": 0.5
+      }
     },
     "lapis_lazuli": {
-      "texture": "cache/restricted/lapis_lazuli.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Lapis_Lazuli_JE2_BE2.png?d36c7",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/lapis_lazuli.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "青金石",
-      "en_name": "Lapis Lazuli"
+      "en_name": "Lapis Lazuli",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.5,
+        "u2": 0.5454545454545454,
+        "v2": 0.6
+      }
     },
     "sugar_cane": {
-      "texture": "cache/restricted/sugar_cane.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Sugar_Cane_JE2_BE2.png?2d23b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/sugar_cane.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "甘蔗",
-      "en_name": "Sugar Cane"
+      "en_name": "Sugar Cane",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.8,
+        "u2": 0.7272727272727273,
+        "v2": 0.9
+      }
     },
     "paper": {
-      "texture": "cache/restricted/paper.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Paper_JE2_BE2.png?88891",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/paper.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "纸",
-      "en_name": "Paper"
+      "en_name": "Paper",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.6,
+        "u2": 0.8181818181818182,
+        "v2": 0.7
+      }
     },
     "book": {
-      "texture": "cache/restricted/book.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Book_JE2_BE2.png?8310b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/book.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "书",
-      "en_name": "Book"
+      "en_name": "Book",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.0,
+        "u2": 0.6363636363636364,
+        "v2": 0.1
+      }
     },
     "blaze_rod": {
-      "texture": "cache/restricted/blaze_rod.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Blaze_Rod_JE1_BE1.png?d06fc",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/blaze_rod.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "烈焰棒",
-      "en_name": "Blaze Rod"
+      "en_name": "Blaze Rod",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.0,
+        "u2": 0.5454545454545454,
+        "v2": 0.1
+      }
     },
     "blaze_powder": {
-      "texture": "cache/restricted/blaze_powder.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Blaze_Powder_JE2_BE1.png?a5171",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/blaze_powder.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "烈焰粉",
-      "en_name": "Blaze Powder"
+      "en_name": "Blaze Powder",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.0,
+        "u2": 0.45454545454545453,
+        "v2": 0.1
+      }
     },
     "nether_wart": {
-      "texture": "cache/restricted/nether_wart.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Nether_Wart_Age_3_JE6_BE2.png?2ee0b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/nether_wart.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "下界疣",
-      "en_name": "Nether Wart"
+      "en_name": "Nether Wart",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.6,
+        "u2": 0.5454545454545454,
+        "v2": 0.7
+      }
     },
     "sugar": {
-      "texture": "cache/restricted/sugar.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Sugar_JE2_BE2.png?e8770",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/sugar.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "糖",
-      "en_name": "Sugar"
+      "en_name": "Sugar",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.8,
+        "u2": 0.6363636363636364,
+        "v2": 0.9
+      }
     },
     "spider_eye": {
-      "texture": "cache/restricted/spider_eye.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Spider_Eye_JE2_BE2.png?45798",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/spider_eye.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "蜘蛛眼",
-      "en_name": "Spider Eye"
+      "en_name": "Spider Eye",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 144,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.8181818181818182,
+        "v": 0.7,
+        "u2": 0.9090909090909091,
+        "v2": 0.8
+      }
     },
     "glistering_melon": {
-      "texture": "cache/restricted/glistering_melon.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Glistering_Melon_Slice_JE2_BE2.png?42c6e",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/glistering_melon.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "闪烁的西瓜",
-      "en_name": "Glistering Melon Slice"
+      "en_name": "Glistering Melon Slice",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.3,
+        "u2": 0.45454545454545453,
+        "v2": 0.4
+      }
     },
     "glass_bottle": {
-      "texture": "cache/restricted/glass_bottle.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Glass_Bottle_JE2_BE2.png?03581",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/glass_bottle.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "玻璃瓶",
-      "en_name": "Glass Bottle"
+      "en_name": "Glass Bottle",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.3,
+        "u2": 0.36363636363636365,
+        "v2": 0.4
+      }
     },
     "water_bottle": {
-      "texture": "cache/restricted/water_bottle.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Water_Bottle_JE2_BE3.png?63599",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/water_bottle.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "水瓶",
-      "en_name": "Water Bottle"
+      "en_name": "Water Bottle",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 128,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.8,
+        "u2": 1.0,
+        "v2": 0.9
+      }
     },
     "awkward_potion": {
-      "texture": "cache/restricted/awkward_potion.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Invicon_Awkward_Potion.png?46cb6",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/awkward_potion.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "粗制药水",
-      "en_name": "Awkward Potion"
+      "en_name": "Awkward Potion",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.0,
+        "u2": 0.18181818181818182,
+        "v2": 0.1
+      }
     },
     "potion_healing": {
-      "texture": "cache/restricted/potion_healing.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Healing_JE2_BE3.png?75039",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/potion_healing.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "治疗药水",
-      "en_name": "Potion of Healing"
+      "en_name": "Potion of Healing",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.6,
+        "u2": 1.0,
+        "v2": 0.7
+      }
     },
     "potion_swiftness": {
-      "texture": "cache/restricted/potion_swiftness.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Swiftness_JE3_BE3.png?f79ff",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/potion_swiftness.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "迅捷药水",
-      "en_name": "Potion of Swiftness"
+      "en_name": "Potion of Swiftness",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 16,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.09090909090909091,
+        "v": 0.7,
+        "u2": 0.18181818181818182,
+        "v2": 0.8
+      }
     },
     "potion_poison": {
-      "texture": "cache/restricted/potion_poison.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Potion_of_Poison_JE3_BE3.png?b914a",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/potion_poison.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "剧毒药水",
-      "en_name": "Potion of Poison"
+      "en_name": "Potion of Poison",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.7,
+        "u2": 0.09090909090909091,
+        "v2": 0.8
+      }
     },
     "cobblestone": {
-      "texture": "cache/restricted/cobblestone.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Cobblestone_JE7_BE3.png?a83c5",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/cobblestone.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "圆石",
-      "en_name": "Cobblestone"
+      "en_name": "Cobblestone",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.1,
+        "u2": 0.7272727272727273,
+        "v2": 0.2
+      }
     },
     "gravel": {
-      "texture": "cache/restricted/gravel.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Gravel_JE5_BE4.png?a6d50",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/gravel.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "沙砾",
-      "en_name": "Gravel"
+      "en_name": "Gravel",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.4,
+        "u2": 0.36363636363636365,
+        "v2": 0.5
+      }
     },
     "clay": {
-      "texture": "cache/restricted/clay.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Clay_JE2_BE2.png?7f8a4",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/clay.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "黏土块",
-      "en_name": "Clay"
+      "en_name": "Clay",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.1,
+        "u2": 0.45454545454545453,
+        "v2": 0.2
+      }
     },
     "ice": {
-      "texture": "cache/restricted/ice.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Ice_JE6_BE6.png?0339d",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/ice.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "冰",
-      "en_name": "Ice"
+      "en_name": "Ice",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 64,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.4,
+        "u2": 0.45454545454545453,
+        "v2": 0.5
+      }
     },
     "snow_block": {
-      "texture": "cache/restricted/snow_block.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Snow_Block_JE2_BE2.png?a2537",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/snow_block.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "雪块",
-      "en_name": "Snow Block"
+      "en_name": "Snow Block",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 128,
+        "y": 112,
+        "w": 16,
+        "h": 16,
+        "u": 0.7272727272727273,
+        "v": 0.7,
+        "u2": 0.8181818181818182,
+        "v2": 0.8
+      }
     },
     "bedrock": {
-      "texture": "cache/restricted/bedrock.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Bedrock_JE2_BE2.png?13f82",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bedrock.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "基岩",
-      "en_name": "Bedrock"
+      "en_name": "Bedrock",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 0,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.0,
+        "u2": 0.36363636363636365,
+        "v2": 0.1
+      }
     },
     "lava": {
-      "texture": "cache/restricted/lava.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Lava_JE19.png?1c56f",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/lava.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "熔岩",
-      "en_name": "Lava"
+      "en_name": "Lava",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 112,
+        "y": 80,
+        "w": 16,
+        "h": 16,
+        "u": 0.6363636363636364,
+        "v": 0.5,
+        "u2": 0.7272727272727273,
+        "v2": 0.6
+      }
     },
     "netherrack": {
-      "texture": "cache/restricted/netherrack.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Netherrack_JE4_BE2.png?e5f97",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/netherrack.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "下界岩",
-      "en_name": "Netherrack"
+      "en_name": "Netherrack",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 96,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.5454545454545454,
+        "v": 0.6,
+        "u2": 0.6363636363636364,
+        "v2": 0.7
+      }
     },
     "glowstone": {
-      "texture": "cache/restricted/glowstone.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Glowstone_JE4.png?cb615",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/glowstone.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "荧石",
-      "en_name": "Glowstone"
+      "en_name": "Glowstone",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 80,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.45454545454545453,
+        "v": 0.3,
+        "u2": 0.5454545454545454,
+        "v2": 0.4
+      }
     },
     "nether_portal": {
-      "texture": "cache/restricted/nether_portal.gif",
-      "icon_url": "https://zh.minecraft.wiki/images/Nether_Portal_JE.gif?409dd",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/nether_portal.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "下界传送门",
-      "en_name": "Nether Portal"
+      "en_name": "Nether Portal",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 64,
+        "y": 96,
+        "w": 16,
+        "h": 16,
+        "u": 0.36363636363636365,
+        "v": 0.6,
+        "u2": 0.45454545454545453,
+        "v2": 0.7
+      }
     },
     "end_stone": {
-      "texture": "cache/restricted/end_stone.png",
-      "icon_url": "https://zh.minecraft.wiki/images/End_Stone_JE3_BE2.png?5449b",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/end_stone.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "末地石",
-      "en_name": "End Stone"
+      "en_name": "End Stone",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 160,
+        "y": 32,
+        "w": 16,
+        "h": 16,
+        "u": 0.9090909090909091,
+        "v": 0.2,
+        "u2": 1.0,
+        "v2": 0.3
+      }
     },
     "chorus_fruit": {
-      "texture": "cache/restricted/chorus_fruit.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Chorus_Fruit_JE2_BE2.png?46d4f",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/chorus_fruit.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "紫颂果",
-      "en_name": "Chorus Fruit"
+      "en_name": "Chorus Fruit",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 48,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.2727272727272727,
+        "v": 0.1,
+        "u2": 0.36363636363636365,
+        "v2": 0.2
+      }
     },
     "ender_pearl": {
-      "texture": "cache/restricted/ender_pearl.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Ender_Pearl_JE2_BE2.png?7d893",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/ender_pearl.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "末影珍珠",
-      "en_name": "Ender Pearl"
+      "en_name": "Ender Pearl",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 48,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.3,
+        "u2": 0.09090909090909091,
+        "v2": 0.4
+      }
     },
     "bucket": {
-      "texture": "cache/restricted/bucket.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Bucket_JE2_BE2.png?68540",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/bucket.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "桶",
-      "en_name": "Bucket"
+      "en_name": "Bucket",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.0,
+        "v": 0.1,
+        "u2": 0.09090909090909091,
+        "v2": 0.2
+      }
     },
     "chest": {
-      "texture": "cache/restricted/chest.png",
-      "icon_url": "https://zh.minecraft.wiki/images/Chest_%28S%29_JE2_BE3.png?f32b6",
-      "license": "restricted-mojang-via-wiki",
-      "bucket": "restricted",
+      "texture": "cache/distributable/chest.png",
+      "icon_url": null,
+      "license": "cc0-original-procedural",
+      "bucket": "distributable",
+      "distributable": true,
       "zh_name": "箱子",
-      "en_name": "Chest"
+      "en_name": "Chest",
+      "atlas": {
+        "texture": "atlas.png",
+        "x": 32,
+        "y": 16,
+        "w": 16,
+        "h": 16,
+        "u": 0.18181818181818182,
+        "v": 0.1,
+        "u2": 0.2727272727272727,
+        "v2": 0.2
+      }
     }
+  },
+  "ship_bucket": "distributable",
+  "atlas": {
+    "texture": "atlas.png",
+    "meta": "atlas.json",
+    "license": "cc0-original-procedural",
+    "core_ids": [
+      "grass",
+      "dirt",
+      "stone",
+      "wood",
+      "planks",
+      "leaves",
+      "sand",
+      "water",
+      "bricks",
+      "glass",
+      "coal_ore",
+      "copper_ore",
+      "iron_ore",
+      "gold_ore",
+      "diamond_ore",
+      "lapis_ore",
+      "redstone_ore",
+      "obsidian",
+      "crafting_table",
+      "furnace",
+      "enchanting_table",
+      "bookshelf",
+      "brewing_stand",
+      "torch",
+      "wool",
+      "bed",
+      "redstone_dust",
+      "lever",
+      "redstone_torch",
+      "redstone_lamp"
+    ]
   }
 }
