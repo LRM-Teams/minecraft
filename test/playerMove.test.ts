@@ -9,6 +9,7 @@ import {
   tryHorizontalMove,
   resolveVertical,
   eyeOnFloor,
+  headYFromEye,
 } from "../src/playerMove";
 
 /** Column map: y → solid? Missing = air. */
@@ -138,5 +139,44 @@ describe("vertical jump / land", () => {
     const fall = resolveVertical(solid, 0, eye, 0, -2, 0.1);
     expect(fall.grounded).toBe(false);
     expect(fall.eyeY).toBeCloseTo(eye - 0.2);
+  });
+
+  it("stops the head just under a ceiling after a jump impulse", () => {
+    // Floor 0, air 1–2, solid ceiling at 3 → standing eye 1.62, head 1.8 → yMax≈2.
+    const solid = column([0, 3, 4]);
+    const eye = eyeOnFloor(0);
+    const hit = resolveVertical(solid, 0, eye, 0, 12, 0.25);
+    expect(hit.verticalVelocity).toBe(0);
+    expect(headYFromEye(hit.eyeY)).toBeLessThan(3);
+    expect(bodyBlockedAt(solid, 0, hit.eyeY, 0)).toBe(false);
+  });
+});
+
+describe("footprint AABB block overlap (JE floor query)", () => {
+  it("overlaps the neighbouring column when the 0.6 box crosses a block edge", () => {
+    // Wall at x=1 from y=1..3; player near the edge should collide horizontally.
+    const solid = grid([
+      [0, 0, 0], [1, 0, 0],
+      [1, 1, 0], [1, 2, 0], [1, 3, 0],
+    ]);
+    const eye = eyeOnFloor(0);
+    // Center at 0.75 → AABB [0.45, 1.05] overlaps column 1.
+    expect(bodyBlockedAt(solid, 0.75, eye, 0)).toBe(true);
+    const slid = tryHorizontalMove(solid, 0.2, eye, 0, 0.7, 0);
+    expect(slid.x).toBeLessThan(0.75);
+  });
+
+  it("still walks a 2-high door when approaching from a slight angle", () => {
+    // Doorway at x=1: floor 0, air 1–2, lintel 3; approach from x=0.
+    const solid = grid([
+      [0, 0, 0], [1, 0, 0], [2, 0, 0],
+      [1, 3, 0], [1, 3, 1],
+      [0, 0, 1], [1, 0, 1], [2, 0, 1],
+      [1, 3, -1],
+    ]);
+    const eye = eyeOnFloor(0);
+    const moved = tryHorizontalMove(solid, 0, eye, 0, 1.1, 0.15);
+    expect(moved.x).toBeGreaterThan(0.5);
+    expect(bodyBlockedAt(solid, moved.x, moved.eyeY, moved.z)).toBe(false);
   });
 });
