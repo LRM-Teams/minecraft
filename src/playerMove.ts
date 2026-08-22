@@ -26,20 +26,16 @@ export const feetYFromEye = (eyeY: number): number => eyeY - PLAYER_EYE;
 export const headYFromEye = (eyeY: number): number => feetYFromEye(eyeY) + PLAYER_HEIGHT;
 export const eyeOnFloor = (floorY: number): number => floorY + PLAYER_EYE;
 
-/** Integer columns covered by the 0.6-wide footprint (corners + center). */
+/** Integer columns overlapped by the 0.6-wide AABB (JE floor-based block query). */
 export const footprintColumns = (x: number, z: number): Array<[number, number]> => {
-  const inset = 1e-3;
-  const samplesX = [x - PLAYER_HALF_WIDTH + inset, x, x + PLAYER_HALF_WIDTH - inset];
-  const samplesZ = [z - PLAYER_HALF_WIDTH + inset, z, z + PLAYER_HALF_WIDTH - inset];
-  const seen = new Set<string>();
+  const eps = 1e-4;
+  const minX = x - PLAYER_HALF_WIDTH + eps;
+  const maxX = x + PLAYER_HALF_WIDTH - eps;
+  const minZ = z - PLAYER_HALF_WIDTH + eps;
+  const maxZ = z + PLAYER_HALF_WIDTH - eps;
   const out: Array<[number, number]> = [];
-  for (const sx of samplesX) {
-    for (const sz of samplesZ) {
-      const bx = Math.round(sx);
-      const bz = Math.round(sz);
-      const key = `${bx},${bz}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+  for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx += 1) {
+    for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz += 1) {
       out.push([bx, bz]);
     }
   }
